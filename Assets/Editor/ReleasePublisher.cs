@@ -109,11 +109,12 @@ public class ReleasePublisher : EditorWindow
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            string archivePath = BuildAndArchive(projectRoot, normalizedVersion);
+            string installerPath;
+            string archivePath = BuildAndArchive(projectRoot, normalizedVersion, out installerPath);
             WriteVersionManifest(projectRoot, normalizedVersion, archivePath);
             AssetDatabase.Refresh();
             CommitAndPush(projectRoot, normalizedVersion);
-            CreateRelease(normalizedVersion, archivePath);
+            CreateRelease(normalizedVersion, archivePath, installerPath);
 
             status = "Versión " + normalizedVersion + " publicada correctamente.";
             EditorUtility.DisplayDialog("Publicación completada", status, "Aceptar");
@@ -162,8 +163,9 @@ public class ReleasePublisher : EditorWindow
         return parsed.Major + "." + parsed.Minor + "." + (parsed.Build + 1);
     }
 
-    private static string BuildAndArchive(string projectRoot, string normalizedVersion)
+    private static string BuildAndArchive(string projectRoot, string normalizedVersion, out string installerPath)
     {
+        installerPath = null;
         BuildTarget target = EditorUserBuildSettings.activeBuildTarget;
         string buildFolder = Path.Combine(projectRoot, "Builds", "Snake-" + normalizedVersion);
         Directory.CreateDirectory(buildFolder);
@@ -201,6 +203,8 @@ public class ReleasePublisher : EditorWindow
                 projectRoot,
                 null
             );
+
+            installerPath = CreateMacInstaller(projectRoot, buildFolder, normalizedVersion);
         }
         else
         {
@@ -213,6 +217,40 @@ public class ReleasePublisher : EditorWindow
         }
 
         return archivePath;
+    }
+
+    private static string CreateMacInstaller(string projectRoot, string buildFolder, string normalizedVersion)
+    {
+        string createDmg = File.Exists("/opt/homebrew/bin/create-dmg")
+            ? "/opt/homebrew/bin/create-dmg"
+            : "/usr/local/bin/create-dmg";
+        if (!File.Exists(createDmg))
+            throw new InvalidOperationException("No se encontró create-dmg. Instálalo antes de publicar para macOS.");
+
+        string background = Path.Combine(projectRoot, "Assets", "Editor", "Installer", "DmgBackground.png");
+        if (!File.Exists(background))
+            throw new InvalidOperationException("No se encontró el fondo Assets/Editor/Installer/DmgBackground.png.");
+
+        string dmgPath = Path.Combine(projectRoot, "Builds", "Snake-" + normalizedVersion + "-Installer.dmg");
+        if (File.Exists(dmgPath)) File.Delete(dmgPath);
+
+        string arguments = "--volname \"Snake Game\""
+            + " --background \"" + background + "\""
+            + " --window-pos 200 120"
+            + " --window-size 660 400"
+            + " --icon-size 128"
+            + " --icon \"Snake.app\" 170 190"
+            + " --hide-extension \"Snake.app\""
+            + " --app-drop-link 490 190"
+            + " --no-internet-enable"
+            + " \"" + dmgPath + "\""
+            + " \"" + buildFolder + "\"";
+
+        RunProcess(createDmg, arguments, projectRoot, null);
+        if (!File.Exists(dmgPath) || new FileInfo(dmgPath).Length == 0)
+            throw new InvalidOperationException("create-dmg no generó el instalador.");
+
+        return dmgPath;
     }
 
     private static void BuildUpdaterApp(string projectRoot, string gameAppPath)
@@ -288,7 +326,7 @@ public class ReleasePublisher : EditorWindow
         }
     }
 
-    private void CreateRelease(string normalizedVersion, string archivePath)
+    private void CreateRelease(string normalizedVersion, string archivePath, string installerPath)
     {
         using (HttpClient client = new HttpClient())
         {
@@ -307,16 +345,24 @@ public class ReleasePublisher : EditorWindow
                 throw new InvalidOperationException("GitHub rechazó el release: " + responseBody);
 
             ReleaseResponse release = JsonUtility.FromJson<ReleaseResponse>(responseBody);
-            byte[] archive = File.ReadAllBytes(archivePath);
-            using (ByteArrayContent content = new ByteArrayContent(archive))
-            {
-                content.Headers.ContentType = new MediaTypeHeaderValue("application/zip");
-                string uploadUrl = "https://uploads.github.com/repos/" + RepositoryOwner + "/" + RepositoryName
-                    + "/releases/" + release.id + "/assets?name=" + Uri.EscapeDataString(Path.GetFileName(archivePath));
-                HttpResponseMessage upload = client.PostAsync(uploadUrl, content).GetAwaiter().GetResult();
-                if (!upload.IsSuccessStatusCode)
-                    throw new InvalidOperationException("No se pudo adjuntar el ZIP: " + upload.Content.ReadAsStringAsync().GetAwaiter().GetResult());
-            }
+            UploadReleaseAsset(client, release.id, archivePath, "application/zip");
+            if (!string.IsNullOrWhiteSpace(installerPath))
+                UploadReleaseAsset(client, release.id, installerPath, "application/x-apple-diskimage");
+        }
+    }
+
+    private static void UploadReleaseAsset(HttpClient client, long releaseId, string assetPath, string contentType)
+    {
+        byte[] bytes = File.ReadAllBytes(assetPath);
+        using (ByteArrayContent content = new ByteArrayContent(bytes))
+        {
+            content.Headers.ContentType = new MediaTypeHeaderValue(contentType);
+            string uploadUrl = "https://uploads.github.com/repos/" + RepositoryOwner + "/" + RepositoryName
+                + "/releases/" + releaseId + "/assets?name=" + Uri.EscapeDataString(Path.GetFileName(assetPath));
+            HttpResponseMessage upload = client.PostAsync(uploadUrl, content).GetAwaiter().GetResult();
+            if (!upload.IsSuccessStatusCode)
+                throw new InvalidOperationException("No se pudo adjuntar " + Path.GetFileName(assetPath) + ": "
+                    + upload.Content.ReadAsStringAsync().GetAwaiter().GetResult());
         }
     }
 
