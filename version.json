@@ -1,8 +1,8 @@
 {
-  "latestVersion": "1.0.20",
-  "minimumVersion": "1.0.20",
-  "downloadUrl": "https://github.com/VisionGameStudios/SnakeGame/releases/download/v1.0.20/Snake-1.0.20-StandaloneOSX.zip",
-  "sha256": "dcc8ab8228c3e7d9a8060bf60d4fcd9dad2a61a1aa8b9e563fcb7eaf2a53a53d",
-  "size": 34959261,
-  "message": "Nueva versión de Snake."
+  "latestVersion": "1.0.21",
+  "minimumVersion": "1.0.21",
+  "downloadUrl": "https://github.com/VisionGameStudios/SnakeGame/releases/download/v1.0.21/Snake-1.0.21-StandaloneOSX.zip",
+  "sha256": "1ffdfce9ee7c9525f17c6e3b66fae947ff2ac4a07a1d3aa15d91f802a4eeac3e",
+  "size": 34959260,
+  "message": "Nueva versión de Snake. Se corrigieron errores para mejorar la experiencia de juego"
 }
