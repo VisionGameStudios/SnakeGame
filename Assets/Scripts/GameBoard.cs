@@ -5,6 +5,7 @@ public static class GameBoard
     private const float WallThickness = 0.08f;
     private const float ScreenInset = 0.25f;
     private static Sprite squareSprite;
+    private static Sprite checkerSprite;
 
     public static float LeftBoundary { get; private set; }
     public static float RightBoundary { get; private set; }
@@ -46,10 +47,28 @@ public static class GameBoard
         IsReady = true;
 
         GameObject walls = new GameObject("Board Walls");
+        CreateCheckerboard(walls.transform);
         CreateWall(walls.transform, "Top", new Vector2(LeftBoundary, TopBoundary), new Vector2(RightBoundary, TopBoundary));
         CreateWall(walls.transform, "Bottom", new Vector2(LeftBoundary, BottomBoundary), new Vector2(RightBoundary, BottomBoundary));
         CreateWall(walls.transform, "Left", new Vector2(LeftBoundary, BottomBoundary), new Vector2(LeftBoundary, TopBoundary));
         CreateWall(walls.transform, "Right", new Vector2(RightBoundary, BottomBoundary), new Vector2(RightBoundary, TopBoundary));
+    }
+
+    private static void CreateCheckerboard(Transform parent)
+    {
+        GameObject background = new GameObject("Checkerboard");
+        background.transform.SetParent(parent);
+        background.transform.position = new Vector3(
+            (LeftBoundary + RightBoundary) * 0.5f,
+            (BottomBoundary + TopBoundary) * 0.5f,
+            1f
+        );
+
+        SpriteRenderer renderer = background.AddComponent<SpriteRenderer>();
+        renderer.sprite = GetCheckerSprite();
+        renderer.drawMode = SpriteDrawMode.Tiled;
+        renderer.size = new Vector2(RightBoundary - LeftBoundary, TopBoundary - BottomBoundary);
+        renderer.sortingOrder = -10;
     }
 
     public static bool WouldCrossWall(Vector3 centerPosition)
@@ -108,5 +127,29 @@ public static class GameBoard
         texture.Apply();
         squareSprite = Sprite.Create(texture, new Rect(0, 0, 1, 1), new Vector2(0.5f, 0.5f), 1f);
         return squareSprite;
+    }
+
+    private static Sprite GetCheckerSprite()
+    {
+        if (checkerSprite != null)
+        {
+            return checkerSprite;
+        }
+
+        Color lightSquare = new Color(0.20f, 0.34f, 0.52f);
+        Color darkSquare = new Color(0.16f, 0.29f, 0.46f);
+        Texture2D texture = new Texture2D(2, 2);
+        texture.name = "Generated Checkerboard";
+        texture.filterMode = FilterMode.Point;
+        texture.wrapMode = TextureWrapMode.Repeat;
+        texture.SetPixel(0, 0, lightSquare);
+        texture.SetPixel(1, 0, darkSquare);
+        texture.SetPixel(0, 1, darkSquare);
+        texture.SetPixel(1, 1, lightSquare);
+        texture.Apply();
+
+        checkerSprite = Sprite.Create(texture, new Rect(0, 0, 2, 2), new Vector2(0.5f, 0.5f), 1f);
+        checkerSprite.name = "Generated Checkerboard";
+        return checkerSprite;
     }
 }
