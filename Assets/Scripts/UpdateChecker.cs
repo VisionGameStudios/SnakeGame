@@ -28,8 +28,12 @@ public class UpdateChecker : MonoBehaviour
     private bool showUpdate;
     private bool mandatoryUpdate;
     private bool downloading;
+    private bool preparingInstall;
     private string downloadError;
     private float downloadProgress;
+    private static Texture2D updateButtonTexture;
+    private static Texture2D updateButtonHoverTexture;
+    private static Texture2D updateButtonActiveTexture;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Initialize()
@@ -94,18 +98,21 @@ public class UpdateChecker : MonoBehaviour
         // nunca puede ocultar el aviso de actualización.
         GUI.depth = -1000;
 
-        int width = Mathf.Min(600, Screen.width - 32);
-        int height = Mathf.Min(340, Screen.height - 32);
+        int width = Mathf.Min(620, Screen.width - 32);
+        int height = Mathf.Min(360, Screen.height - 32);
         Rect panel = new Rect((Screen.width - width) / 2f, (Screen.height - height) / 2f, width, height);
 
-        GUI.color = new Color(0.04f, 0.08f, 0.14f, 0.98f);
-        GUI.DrawTexture(panel, Texture2D.whiteTexture);
-        GUI.color = Color.white;
+        DrawOverlay(new Color(0.01f, 0.03f, 0.06f, 0.78f));
+        DrawPanel(new Rect(panel.x + 10, panel.y + 10, panel.width, panel.height), new Color(0f, 0f, 0f, 0.42f));
+        DrawPanel(panel, new Color(0.05f, 0.1f, 0.17f, 0.99f));
+        DrawPanel(new Rect(panel.x + 8, panel.y + 8, panel.width - 16, panel.height - 16), new Color(0.08f, 0.15f, 0.23f, 0.96f));
+        DrawBorder(panel, 4, new Color(0.3f, 0.9f, 0.48f));
+        DrawPanel(new Rect(panel.x + 4, panel.y + 4, panel.width - 8, 5), new Color(1f, 0.82f, 0.2f));
 
         GUIStyle title = new GUIStyle(GUI.skin.label)
         {
             alignment = TextAnchor.MiddleCenter,
-            fontSize = 32,
+            fontSize = 28,
             fontStyle = FontStyle.Bold
         };
         title.normal.textColor = new Color(1f, 0.9f, 0.3f);
@@ -113,44 +120,103 @@ public class UpdateChecker : MonoBehaviour
         GUIStyle body = new GUIStyle(GUI.skin.label)
         {
             alignment = TextAnchor.MiddleCenter,
-            fontSize = 18,
+            fontSize = 17,
             wordWrap = true
         };
         body.normal.textColor = Color.white;
 
-        GUI.Label(new Rect(panel.x + 20, panel.y + 24, panel.width - 40, 50), "NUEVA VERSION", title);
-        GUI.Label(new Rect(panel.x + 40, panel.y + 82, panel.width - 80, 66), remoteVersion.message, body);
-        GUI.Label(new Rect(panel.x + 40, panel.y + 145, panel.width - 80, 30), Application.version + "  >  " + remoteVersion.latestVersion, body);
+        GUI.Label(new Rect(panel.x + 24, panel.y + 20, panel.width - 48, 44), "NUEVA VERSION", title);
+        GUI.Label(new Rect(panel.x + 48, panel.y + 66, panel.width - 96, 42), remoteVersion.message, body);
+
+        Rect versionRect = new Rect(panel.x + 72, panel.y + 119, panel.width - 144, 44);
+        DrawPanel(versionRect, new Color(0.02f, 0.05f, 0.09f, 0.9f));
+        DrawBorder(versionRect, 2, new Color(0.16f, 0.34f, 0.43f));
+        GUI.Label(versionRect, Application.version + "  >  " + remoteVersion.latestVersion, title);
 
         if (remoteVersion.size > 0)
         {
-            GUI.Label(new Rect(panel.x + 40, panel.y + 174, panel.width - 80, 25), FormatBytes(remoteVersion.size), body);
+            GUI.Label(new Rect(panel.x + 40, panel.y + 169, panel.width - 80, 24), FormatBytes(remoteVersion.size), body);
         }
 
         if (downloading)
         {
-            GUI.Box(new Rect(panel.x + 40, panel.y + 208, panel.width - 80, 24), GUIContent.none);
-            GUI.Box(new Rect(panel.x + 40, panel.y + 208, (panel.width - 80) * downloadProgress, 24), GUIContent.none);
-            GUI.Label(new Rect(panel.x + 40, panel.y + 235, panel.width - 80, 25), "Descargando " + Mathf.RoundToInt(downloadProgress * 100f) + "%", body);
+            Rect progressRect = new Rect(panel.x + 50, panel.y + 205, panel.width - 100, 18);
+            DrawPanel(progressRect, new Color(0.02f, 0.04f, 0.07f));
+            DrawPanel(new Rect(progressRect.x, progressRect.y, progressRect.width * downloadProgress, progressRect.height), new Color(0.3f, 0.9f, 0.48f));
+            string progressLabel = preparingInstall
+                ? "PREPARANDO INSTALACION..."
+                : "DESCARGANDO " + Mathf.RoundToInt(downloadProgress * 100f) + "%";
+            GUI.Label(new Rect(panel.x + 40, panel.y + 228, panel.width - 80, 24), progressLabel, body);
         }
 
         if (!string.IsNullOrWhiteSpace(downloadError))
         {
-            GUI.Label(new Rect(panel.x + 30, panel.y + 205, panel.width - 60, 55), downloadError, body);
+            GUIStyle error = new GUIStyle(body);
+            error.normal.textColor = new Color(1f, 0.62f, 0.5f);
+            GUI.Label(new Rect(panel.x + 38, panel.y + 201, panel.width - 76, 50), downloadError, error);
         }
+
+        GUIStyle button = new GUIStyle(GUI.skin.button)
+        {
+            fontSize = 16,
+            fontStyle = FontStyle.Bold
+        };
+        button.normal.textColor = new Color(0.02f, 0.04f, 0.07f);
+        button.hover.textColor = Color.black;
+        button.active.textColor = Color.black;
+        button.normal.background = GetTexture(ref updateButtonTexture, new Color(1f, 0.84f, 0.25f));
+        button.hover.background = GetTexture(ref updateButtonHoverTexture, new Color(1f, 0.94f, 0.5f));
+        button.active.background = GetTexture(ref updateButtonActiveTexture, new Color(0.88f, 0.7f, 0.16f));
 
         bool guiWasEnabled = GUI.enabled;
         GUI.enabled = !downloading;
-        if (GUI.Button(new Rect(panel.x + panel.width / 2f - 175, panel.y + panel.height - 65, 165, 45), "ACTUALIZAR"))
+        if (GUI.Button(new Rect(panel.x + panel.width / 2f - 180, panel.y + panel.height - 64, 170, 44), "ACTUALIZAR", button))
         {
             StartCoroutine(DownloadAndInstall());
         }
         GUI.enabled = guiWasEnabled;
 
-        if (!mandatoryUpdate && !downloading && GUI.Button(new Rect(panel.x + panel.width / 2f + 10, panel.y + panel.height - 65, 165, 45), "MAS TARDE"))
+        if (!mandatoryUpdate && !downloading && GUI.Button(new Rect(panel.x + panel.width / 2f + 10, panel.y + panel.height - 64, 170, 44), "MAS TARDE", button))
         {
             showUpdate = false;
         }
+    }
+
+    private static void DrawOverlay(Color color)
+    {
+        Color previousColor = GUI.color;
+        GUI.color = color;
+        GUI.DrawTexture(new Rect(0, 0, Screen.width, Screen.height), Texture2D.whiteTexture);
+        GUI.color = previousColor;
+    }
+
+    private static void DrawPanel(Rect rect, Color color)
+    {
+        Color previousColor = GUI.color;
+        GUI.color = color;
+        GUI.DrawTexture(rect, Texture2D.whiteTexture);
+        GUI.color = previousColor;
+    }
+
+    private static void DrawBorder(Rect rect, int thickness, Color color)
+    {
+        DrawPanel(new Rect(rect.x, rect.y, rect.width, thickness), color);
+        DrawPanel(new Rect(rect.x, rect.yMax - thickness, rect.width, thickness), color);
+        DrawPanel(new Rect(rect.x, rect.y, thickness, rect.height), color);
+        DrawPanel(new Rect(rect.xMax - thickness, rect.y, thickness, rect.height), color);
+    }
+
+    private static Texture2D GetTexture(ref Texture2D texture, Color color)
+    {
+        if (texture != null)
+        {
+            return texture;
+        }
+
+        texture = new Texture2D(1, 1);
+        texture.SetPixel(0, 0, color);
+        texture.Apply();
+        return texture;
     }
 
     private IEnumerator DownloadAndInstall()
@@ -168,11 +234,16 @@ public class UpdateChecker : MonoBehaviour
         }
 
         downloading = true;
+        preparingInstall = false;
         downloadError = "";
         downloadProgress = 0f;
         string directory = Path.Combine(Application.temporaryCachePath, "updates");
         string archivePath = Path.Combine(directory, "Snake-" + remoteVersion.latestVersion + ".zip");
         Directory.CreateDirectory(directory);
+        if (File.Exists(archivePath))
+        {
+            File.Delete(archivePath);
+        }
 
         using (UnityWebRequest request = UnityWebRequest.Get(remoteVersion.downloadUrl))
         {
@@ -194,6 +265,7 @@ public class UpdateChecker : MonoBehaviour
         }
 
         downloadProgress = 1f;
+        preparingInstall = true;
         if (!string.Equals(ComputeSha256(archivePath), remoteVersion.sha256.Trim(), StringComparison.OrdinalIgnoreCase))
         {
             File.Delete(archivePath);
@@ -202,17 +274,30 @@ public class UpdateChecker : MonoBehaviour
             yield break;
         }
 
-        string appContentsPath = Directory.GetParent(Application.dataPath).FullName;
-        string updaterSource = Path.Combine(appContentsPath, "Updater.app");
-        if (!Directory.Exists(updaterSource))
+        // En macOS Application.dataPath apunta a:
+        // Snake.app/Contents/Resources/Data
+        DirectoryInfo dataDirectory = new DirectoryInfo(Application.dataPath);
+        DirectoryInfo resourcesDirectory = dataDirectory.Parent;
+        DirectoryInfo contentsDirectory = resourcesDirectory != null ? resourcesDirectory.Parent : null;
+        DirectoryInfo appDirectory = contentsDirectory != null ? contentsDirectory.Parent : null;
+
+        string updaterSource = resourcesDirectory != null
+            ? Path.Combine(resourcesDirectory.FullName, "Updater.app")
+            : "";
+
+        if (appDirectory == null || !appDirectory.Name.EndsWith(".app", StringComparison.OrdinalIgnoreCase))
         {
-            updaterSource = Path.Combine(Application.dataPath, "Resources", "Updater.app");
+            downloadError = "No se pudo localizar la aplicación instalada.";
+            downloading = false;
+            preparingInstall = false;
+            yield break;
         }
 
         if (!Directory.Exists(updaterSource))
         {
             downloadError = "Este build no contiene el instalador automático.";
             downloading = false;
+            preparingInstall = false;
             yield break;
         }
 
@@ -231,11 +316,12 @@ public class UpdateChecker : MonoBehaviour
             {
                 downloadError = "No se pudo preparar el instalador.";
                 downloading = false;
+                preparingInstall = false;
                 yield break;
             }
         }
 
-        string installedApp = Directory.GetParent(Application.dataPath).FullName;
+        string installedApp = appDirectory.FullName;
         string updaterExecutable = Path.Combine(updaterPath, "Contents", "MacOS", UpdaterName);
         Process.Start(new ProcessStartInfo
         {

@@ -521,12 +521,19 @@ public class Snake : MonoBehaviour
         string scoreText = score.ToString("D3");
         DrawPixelText(scoreText, hudX + 60, 20, 4, new Color(1f, 0.9f, 0.3f));
 
+        int recordHudWidth = Mathf.Min(220, Screen.width - hudWidth - 30);
+        int recordHudX = Screen.width - recordHudWidth - 10;
+        Rect recordHudRect = new Rect(recordHudX, 10, recordHudWidth, hudHeight);
+        DrawPixelRect(new Rect(recordHudRect.x + 4, recordHudRect.y + 4, recordHudRect.width, recordHudRect.height), new Color(0.01f, 0.02f, 0.04f, 0.55f));
+        DrawPixelRect(recordHudRect, new Color(0.04f, 0.08f, 0.14f, 0.95f));
+        DrawPixelBorder(recordHudRect, 4, new Color(0.15f, 0.85f, 0.32f));
         string recordText = "RECORD " + bestScore.ToString("D3");
-        int recordPixelSize = 3;
+        int recordPixelSize = recordHudWidth >= 190 ? 3 : 2;
         int recordWidth = (recordText.Length * 6 - 1) * recordPixelSize;
-        int recordX = Mathf.RoundToInt(Screen.width * 0.715f) - recordWidth / 2;
-        DrawPixelText(recordText, recordX + 2, 24, recordPixelSize, new Color(0.01f, 0.02f, 0.04f, 0.8f));
-        DrawPixelText(recordText, recordX, 22, recordPixelSize, new Color(1f, 0.9f, 0.3f));
+        int recordX = recordHudX + (recordHudWidth - recordWidth) / 2;
+        int recordY = 10 + (hudHeight - 7 * recordPixelSize) / 2;
+        DrawPixelText(recordText, recordX + 2, recordY + 2, recordPixelSize, new Color(0.01f, 0.02f, 0.04f, 0.8f));
+        DrawPixelText(recordText, recordX, recordY, recordPixelSize, new Color(1f, 0.9f, 0.3f));
 
         if (paused)
         {
