@@ -237,13 +237,16 @@ public class ReleasePublisher : EditorWindow
         // Unity deja junto a la app una carpeta *BackUpThisFolder_ButDontShipIt*.
         // El DMG se arma desde un staging aislado para distribuir solo Snake.app.
         string stagingFolder = Path.Combine(projectRoot, "Builds", ".Snake-DmgSource-" + normalizedVersion);
+        string compatibilityToolFolder = Path.Combine(projectRoot, "Temp", "SnakeCreateDmg-" + normalizedVersion);
         if (Directory.Exists(stagingFolder)) Directory.Delete(stagingFolder, true);
+        if (Directory.Exists(compatibilityToolFolder)) Directory.Delete(compatibilityToolFolder, true);
         Directory.CreateDirectory(stagingFolder);
 
         try
         {
             string stagedApp = Path.Combine(stagingFolder, "Snake.app");
             RunProcess("/usr/bin/ditto", "\"" + gameAppPath + "\" \"" + stagedApp + "\"", projectRoot, null);
+            string compatibleCreateDmg = CreateCompatibleDmgTool(createDmg, compatibilityToolFolder);
 
             string arguments = "--volname \"Snake Game\""
                 + " --background \"" + background + "\""
@@ -257,16 +260,44 @@ public class ReleasePublisher : EditorWindow
                 + " \"" + dmgPath + "\""
                 + " \"" + stagingFolder + "\"";
 
-            RunProcess(createDmg, arguments, projectRoot, null);
+            RunProcess(compatibleCreateDmg, arguments, projectRoot, null);
             if (!File.Exists(dmgPath) || new FileInfo(dmgPath).Length == 0)
                 throw new InvalidOperationException("create-dmg no generó el instalador.");
         }
         finally
         {
             if (Directory.Exists(stagingFolder)) Directory.Delete(stagingFolder, true);
+            if (Directory.Exists(compatibilityToolFolder)) Directory.Delete(compatibilityToolFolder, true);
         }
 
         return dmgPath;
+    }
+
+    private static string CreateCompatibleDmgTool(string installedTool, string destinationFolder)
+    {
+        DirectoryInfo binFolder = Directory.GetParent(installedTool);
+        DirectoryInfo prefixFolder = binFolder != null ? binFolder.Parent : null;
+        if (prefixFolder == null)
+            throw new InvalidOperationException("No se pudo localizar la instalación de create-dmg.");
+
+        string installedTemplate = Path.Combine(prefixFolder.FullName, "share", "create-dmg", "support", "template.applescript");
+        if (!File.Exists(installedTemplate))
+            throw new InvalidOperationException("create-dmg no contiene support/template.applescript.");
+
+        string supportFolder = Path.Combine(destinationFolder, "support");
+        Directory.CreateDirectory(supportFolder);
+        string toolCopy = Path.Combine(destinationFolder, "create-dmg");
+        File.Copy(installedTool, toolCopy, true);
+        File.WriteAllText(Path.Combine(destinationFolder, ".this-is-the-create-dmg-repo"), "");
+
+        string template = File.ReadAllText(installedTemplate);
+        template = template.Replace(
+            "set statusbar visible to false",
+            "try\nset statusbar visible to false\nend try"
+        );
+        File.WriteAllText(Path.Combine(supportFolder, "template.applescript"), template);
+        RunProcess("/bin/chmod", "+x \"" + toolCopy + "\"", destinationFolder, null);
+        return toolCopy;
     }
 
     private static void BuildUpdaterApp(string projectRoot, string gameAppPath)
