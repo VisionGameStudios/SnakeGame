@@ -1,6 +1,6 @@
 {
-  "latestVersion": "1.0.5",
-  "minimumVersion": "1.0.0",
+  "latestVersion": "1.0.2",
+  "minimumVersion": "1.0.2",
   "downloadUrl": "https://github.com/VisionGameStudios/SnakeGame/releases/latest",
-  "message": "Nueva versión de Snake Game"
+  "message": "Nueva versión de Snake."
 }
