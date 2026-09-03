@@ -218,6 +218,10 @@ public class ReleasePublisher : EditorWindow
             + "<key>CFBundlePackageType</key><string>APPL</string>"
             + "</dict></plist>\n");
         RunProcess("/usr/bin/xcrun", "swiftc \"" + sourcePath + "\" -o \"" + executablePath + "\"", projectRoot, null);
+        RunProcess("/bin/chmod", "+x \"" + executablePath + "\"", projectRoot, null);
+
+        if (!File.Exists(executablePath) || new FileInfo(executablePath).Length == 0)
+            throw new InvalidOperationException("No se pudo incluir el instalador automático en Snake.app.");
     }
 
     private static string ComputeSha256(string path)

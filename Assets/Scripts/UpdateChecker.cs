@@ -274,15 +274,11 @@ public class UpdateChecker : MonoBehaviour
             yield break;
         }
 
-        // En macOS Application.dataPath apunta a:
-        // Snake.app/Contents/Resources/Data
-        DirectoryInfo dataDirectory = new DirectoryInfo(Application.dataPath);
-        DirectoryInfo resourcesDirectory = dataDirectory.Parent;
-        DirectoryInfo contentsDirectory = resourcesDirectory != null ? resourcesDirectory.Parent : null;
-        DirectoryInfo appDirectory = contentsDirectory != null ? contentsDirectory.Parent : null;
-
-        string updaterSource = resourcesDirectory != null
-            ? Path.Combine(resourcesDirectory.FullName, "Updater.app")
+        // Application.dataPath cambia entre versiones de Unity. Localizamos el
+        // bundle .app recorriendo sus padres y partimos de una ruta conocida.
+        DirectoryInfo appDirectory = FindContainingAppBundle(Application.dataPath);
+        string updaterSource = appDirectory != null
+            ? Path.Combine(appDirectory.FullName, "Contents", "Resources", "Updater.app")
             : "";
 
         if (appDirectory == null || !appDirectory.Name.EndsWith(".app", StringComparison.OrdinalIgnoreCase))
@@ -293,44 +289,94 @@ public class UpdateChecker : MonoBehaviour
             yield break;
         }
 
-        if (!Directory.Exists(updaterSource))
-        {
-            downloadError = "Este build no contiene el instalador automático.";
-            downloading = false;
-            preparingInstall = false;
-            yield break;
-        }
-
-        string updaterPath = Path.Combine(directory, UpdaterName + "-" + DateTime.UtcNow.Ticks + ".app");
-        ProcessStartInfo copyInfo = new ProcessStartInfo
-        {
-            FileName = "/usr/bin/ditto",
-            Arguments = Quote(updaterSource) + " " + Quote(updaterPath),
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-        using (Process copy = Process.Start(copyInfo))
-        {
-            copy.WaitForExit();
-            if (copy.ExitCode != 0)
-            {
-                downloadError = "No se pudo preparar el instalador.";
-                downloading = false;
-                preparingInstall = false;
-                yield break;
-            }
-        }
-
         string installedApp = appDirectory.FullName;
-        string updaterExecutable = Path.Combine(updaterPath, "Contents", "MacOS", UpdaterName);
-        Process.Start(new ProcessStartInfo
+        ProcessStartInfo installerInfo;
+
+        if (Directory.Exists(updaterSource))
         {
-            FileName = updaterExecutable,
-            Arguments = Quote(archivePath) + " " + Quote(installedApp) + " " + Process.GetCurrentProcess().Id,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        });
+            string updaterPath = Path.Combine(directory, UpdaterName + "-" + DateTime.UtcNow.Ticks + ".app");
+            ProcessStartInfo copyInfo = new ProcessStartInfo
+            {
+                FileName = "/usr/bin/ditto",
+                Arguments = Quote(updaterSource) + " " + Quote(updaterPath),
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using (Process copy = Process.Start(copyInfo))
+            {
+                copy.WaitForExit();
+                if (copy.ExitCode != 0)
+                {
+                    downloadError = "No se pudo preparar el instalador.";
+                    downloading = false;
+                    preparingInstall = false;
+                    yield break;
+                }
+            }
+
+            installerInfo = new ProcessStartInfo
+            {
+                FileName = Path.Combine(updaterPath, "Contents", "MacOS", UpdaterName),
+                Arguments = Quote(archivePath) + " " + Quote(installedApp) + " " + Process.GetCurrentProcess().Id,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+        }
+        else
+        {
+            // Respaldo para builds que por cualquier motivo perdieron Updater.app.
+            // El script se ejecuta fuera del juego, espera a que cierre y lo reemplaza.
+            string fallbackScript = CreateFallbackUpdater(directory);
+            installerInfo = new ProcessStartInfo
+            {
+                FileName = "/bin/bash",
+                Arguments = Quote(fallbackScript) + " " + Quote(archivePath) + " " + Quote(installedApp) + " " + Process.GetCurrentProcess().Id,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+        }
+
+        Process.Start(installerInfo);
         Application.Quit();
+    }
+
+    private static DirectoryInfo FindContainingAppBundle(string path)
+    {
+        DirectoryInfo current = new DirectoryInfo(path);
+        while (current != null)
+        {
+            if (current.Name.EndsWith(".app", StringComparison.OrdinalIgnoreCase))
+            {
+                return current;
+            }
+
+            current = current.Parent;
+        }
+
+        return null;
+    }
+
+    private static string CreateFallbackUpdater(string directory)
+    {
+        string scriptPath = Path.Combine(directory, "SnakeUpdater-" + DateTime.UtcNow.Ticks + ".sh");
+        string script = "#!/bin/bash\n"
+            + "archive=\"$1\"\n"
+            + "installed=\"$2\"\n"
+            + "game_pid=\"$3\"\n"
+            + "while kill -0 \"$game_pid\" 2>/dev/null; do sleep 1; done\n"
+            + "work=$(/usr/bin/mktemp -d /tmp/SnakeUpdate.XXXXXX) || exit 1\n"
+            + "/usr/bin/ditto -x -k \"$archive\" \"$work\" || exit 1\n"
+            + "new_app=\"$work/Snake.app\"\n"
+            + "[ -d \"$new_app\" ] || exit 1\n"
+            + "backup=\"${installed}.backup\"\n"
+            + "/bin/rm -rf \"$backup\"\n"
+            + "/bin/mv \"$installed\" \"$backup\" || exit 1\n"
+            + "/bin/mv \"$new_app\" \"$installed\" || { /bin/mv \"$backup\" \"$installed\"; exit 1; }\n"
+            + "/usr/bin/open \"$installed\"\n"
+            + "/bin/rm -rf \"$work\"\n"
+            + "/bin/rm -f \"$archive\" \"$0\"\n";
+        File.WriteAllText(scriptPath, script);
+        return scriptPath;
     }
 
     private static string ComputeSha256(string path)
