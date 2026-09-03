@@ -154,8 +154,15 @@ public class ReleasePublisher : EditorWindow
     private void CommitAndPush(string projectRoot, string normalizedVersion)
     {
         RunProcess("git", "add Assets Packages ProjectSettings version.json .gitignore", projectRoot, null);
-        RunProcess("git", "commit -m \"Release v" + normalizedVersion + "\"", projectRoot, null);
-        RunProcess("git", "tag -a v" + normalizedVersion + " -m \"Release v" + normalizedVersion + "\"", projectRoot, null);
+        if (!ProcessSucceeds("git", "diff --cached --quiet", projectRoot))
+        {
+            RunProcess("git", "commit -m \"Release v" + normalizedVersion + "\"", projectRoot, null);
+        }
+
+        if (!ProcessSucceeds("git", "rev-parse -q --verify refs/tags/v" + normalizedVersion, projectRoot))
+        {
+            RunProcess("git", "tag -a v" + normalizedVersion + " -m \"Release v" + normalizedVersion + "\"", projectRoot, null);
+        }
 
         string askPassPath = Path.Combine(Path.GetTempPath(), "snake-git-askpass.sh");
         File.WriteAllText(askPassPath, "#!/bin/sh\ncase \"$1\" in *Username*) echo x-access-token;; *) echo \"$GITHUB_TOKEN\";; esac\n");
@@ -243,6 +250,28 @@ public class ReleasePublisher : EditorWindow
             process.WaitForExit();
             if (process.ExitCode != 0)
                 throw new InvalidOperationException(executable + " falló: " + error + output);
+        }
+    }
+
+    private static bool ProcessSucceeds(string executable, string arguments, string workingDirectory)
+    {
+        ProcessStartInfo startInfo = new ProcessStartInfo
+        {
+            FileName = executable,
+            Arguments = arguments,
+            WorkingDirectory = workingDirectory,
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+
+        using (Process process = Process.Start(startInfo))
+        {
+            process.StandardOutput.ReadToEnd();
+            process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            return process.ExitCode == 0;
         }
     }
 
