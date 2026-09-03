@@ -70,6 +70,7 @@ public class Snake : MonoBehaviour
         { 'X', new[] { "10001", "10001", "01010", "00100", "01010", "10001", "10001" } },
         { '+', new[] { "00000", "00100", "00100", "11111", "00100", "00100", "00000" } },
         { '-', new[] { "00000", "00000", "00000", "11111", "00000", "00000", "00000" } },
+        { '.', new[] { "00000", "00000", "00000", "00000", "00000", "00110", "00110" } },
         { '0', new[] { "01110", "10001", "10011", "10101", "11001", "10001", "01110" } },
         { '1', new[] { "00100", "01100", "00100", "00100", "00100", "00100", "01110" } },
         { '2', new[] { "01110", "10001", "00001", "00010", "00100", "01000", "11111" } },
@@ -392,7 +393,7 @@ public class Snake : MonoBehaviour
 
             if (food != null)
             {
-                food.RandomizePosition();
+                food.HandleEaten(score);
             }
         }
         else if (other.CompareTag("Wall"))
@@ -436,6 +437,7 @@ public class Snake : MonoBehaviour
         gameOver = false;
         paused = false;
         score = 0;
+        Food.ResetBonusFood();
         RestoreHeadSprite();
 
         for (int i = 1; i < initialSize; i++)
@@ -449,6 +451,38 @@ public class Snake : MonoBehaviour
 
         UpdateSpriteOrientations();
 
+    }
+
+    public bool IsPositionReservedForSnake(Vector2 candidate)
+    {
+        for (int i = 0; i < segments.Count; i++)
+        {
+            if (Vector2.SqrMagnitude((Vector2)segments[i].position - candidate) < 0.01f)
+            {
+                return true;
+            }
+        }
+
+        // Reserva el recorrido inmediato que ya está comprometido por el input.
+        Vector2 projectedPosition = transform.position;
+        Vector2Int projectedDirection = direction;
+        Vector2Int[] queuedDirections = pendingDirections.ToArray();
+        const int reservedSteps = 3;
+        for (int step = 0; step < reservedSteps; step++)
+        {
+            if (step < queuedDirections.Length)
+            {
+                projectedDirection = queuedDirections[step];
+            }
+
+            projectedPosition += projectedDirection;
+            if (Vector2.SqrMagnitude(projectedPosition - candidate) < 0.01f)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void ReturnToMainMenu()
@@ -610,6 +644,7 @@ public class Snake : MonoBehaviour
             if (settingsOpen)
             {
                 DrawSettingsOverlay();
+                DrawVersionBadge();
                 return;
             }
 
@@ -617,6 +652,7 @@ public class Snake : MonoBehaviour
             {
                 gameStarted = true;
             }
+            DrawVersionBadge();
             return;
         }
 
@@ -649,11 +685,13 @@ public class Snake : MonoBehaviour
         if (paused)
         {
             DrawPauseOverlay();
+            DrawVersionBadge();
             return;
         }
 
         if (!gameOver)
         {
+            DrawVersionBadge();
             return;
         }
 
@@ -678,6 +716,7 @@ public class Snake : MonoBehaviour
         DrawCenteredPixelText("SCORE " + score.ToString("D3"), panelY + 145, 4, Color.white, 0);
         DrawCenteredPixelText("RECORD " + bestScore.ToString("D3"), panelY + 185, 3, new Color(0.65f, 0.95f, 0.72f), 0);
         DrawCenteredPixelText("R O ESPACIO PARA REINICIAR", panelY + 239, 3, new Color(1f, 0.9f, 0.3f), 0);
+        DrawVersionBadge();
     }
 
     private bool DrawStartOverlay()
@@ -860,6 +899,21 @@ public class Snake : MonoBehaviour
         int width = (message.Length * 6 - 1) * pixelSize;
         int height = 7 * pixelSize;
         DrawPixelText(message, Mathf.RoundToInt(rect.center.x - width / 2f), Mathf.RoundToInt(rect.center.y - height / 2f), pixelSize, color);
+    }
+
+    private static void DrawVersionBadge()
+    {
+        string versionText = "V " + Application.version.ToUpperInvariant();
+        const int pixelSize = 2;
+        int textWidth = (versionText.Length * 6 - 1) * pixelSize;
+        int badgeWidth = textWidth + 20;
+        const int badgeHeight = 30;
+        Rect badge = new Rect(10, Screen.height - badgeHeight - 10, badgeWidth, badgeHeight);
+
+        DrawPixelRect(new Rect(badge.x + 3, badge.y + 3, badge.width, badge.height), new Color(0f, 0f, 0f, 0.38f));
+        DrawPixelRect(badge, new Color(0.03f, 0.07f, 0.12f, 0.82f));
+        DrawPixelBorder(badge, 2, new Color(0.25f, 0.65f, 0.43f, 0.9f));
+        DrawPixelText(versionText, Mathf.RoundToInt(badge.x + 10), Mathf.RoundToInt(badge.y + 8), pixelSize, new Color(0.68f, 0.86f, 0.76f));
     }
 
     private void DrawPauseOverlay()

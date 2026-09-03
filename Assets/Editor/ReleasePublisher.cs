@@ -69,6 +69,16 @@ public class ReleasePublisher : EditorWindow
 
     private void Publish()
     {
+        if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+        {
+            EditorUtility.DisplayDialog(
+                "Unity todavía está preparando el proyecto",
+                "Espera a que termine la compilación e importación de recursos antes de publicar.",
+                "Aceptar"
+            );
+            return;
+        }
+
         Version parsedVersion;
         if (!Version.TryParse(NormalizeVersion(version), out parsedVersion))
         {
@@ -188,7 +198,10 @@ public class ReleasePublisher : EditorWindow
 
         string executablePath = Path.Combine(buildFolder, executableName);
         if (target == BuildTarget.StandaloneOSX)
+        {
             BuildUpdaterApp(projectRoot, executablePath);
+            SignAndVerifyMacApp(projectRoot, executablePath);
+        }
 
         string archivePath = Path.Combine(projectRoot, "Builds", "Snake-" + normalizedVersion + "-" + target + ".zip");
         if (File.Exists(archivePath)) File.Delete(archivePath);
@@ -324,6 +337,83 @@ public class ReleasePublisher : EditorWindow
 
         if (!File.Exists(executablePath) || new FileInfo(executablePath).Length == 0)
             throw new InvalidOperationException("No se pudo incluir el instalador automático en Snake.app.");
+    }
+
+    private static void SignAndVerifyMacApp(string projectRoot, string gameAppPath)
+    {
+        string updaterApp = Path.Combine(gameAppPath, "Contents", "Resources", "Updater.app");
+        string identity = FindDeveloperIdIdentity(projectRoot);
+        bool distributable = !string.IsNullOrWhiteSpace(identity);
+        string signTarget = distributable ? identity : "-";
+        string signingOptions = distributable ? " --options runtime --timestamp" : "";
+
+        // Finder y los proveedores de archivos pueden añadir resource forks/xattrs
+        // que codesign rechaza como "detritus not allowed".
+        RunProcess("/usr/bin/xattr", "-cr \"" + gameAppPath + "\"", projectRoot, null);
+
+        if (Directory.Exists(updaterApp))
+        {
+            RunProcess(
+                "/usr/bin/codesign",
+                "--force" + signingOptions + " --sign \"" + signTarget + "\" \"" + updaterApp + "\"",
+                projectRoot,
+                null
+            );
+        }
+
+        RunProcess(
+            "/usr/bin/codesign",
+            "--force --deep" + signingOptions + " --sign \"" + signTarget + "\" \"" + gameAppPath + "\"",
+            projectRoot,
+            null
+        );
+        RunProcess(
+            "/usr/bin/codesign",
+            "--verify --deep --strict --verbose=2 \"" + gameAppPath + "\"",
+            projectRoot,
+            null
+        );
+
+        if (!distributable)
+        {
+            UnityEngine.Debug.LogWarning(
+                "Snake.app quedó con firma ad-hoc válida, pero las descargas públicas aún necesitan "
+                + "un certificado 'Developer ID Application' y notarización de Apple para abrirse sin alertas."
+            );
+        }
+    }
+
+    private static string FindDeveloperIdIdentity(string projectRoot)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "/usr/bin/security",
+            Arguments = "find-identity -v -p codesigning",
+            WorkingDirectory = projectRoot,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using (Process process = Process.Start(startInfo))
+        {
+            string output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit();
+            foreach (string line in output.Split('\n'))
+            {
+                int marker = line.IndexOf("Developer ID Application:", StringComparison.Ordinal);
+                if (marker < 0)
+                    continue;
+
+                int firstQuote = line.IndexOf('"', marker);
+                int lastQuote = line.LastIndexOf('"');
+                if (firstQuote >= 0 && lastQuote > firstQuote)
+                    return line.Substring(firstQuote + 1, lastQuote - firstQuote - 1);
+            }
+        }
+
+        return null;
     }
 
     private static string ComputeSha256(string path)
