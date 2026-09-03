@@ -415,6 +415,13 @@ public class Snake : MonoBehaviour
 
     }
 
+    private void ReturnToMainMenu()
+    {
+        RestartGame();
+        gameStarted = false;
+        settingsOpen = false;
+    }
+
     private void UpdateSpriteOrientations()
     {
         transform.rotation = RotationForHeadDirection(direction);
@@ -605,7 +612,7 @@ public class Snake : MonoBehaviour
 
         if (paused)
         {
-            DrawMenuOverlay("PAUSA", "P O ESC PARA SEGUIR", "SCORE " + score.ToString("D3"));
+            DrawPauseOverlay();
             return;
         }
 
@@ -819,12 +826,12 @@ public class Snake : MonoBehaviour
         DrawPixelText(message, Mathf.RoundToInt(rect.center.x - width / 2f), Mathf.RoundToInt(rect.center.y - height / 2f), pixelSize, color);
     }
 
-    private static void DrawMenuOverlay(string title, string action, string footer)
+    private void DrawPauseOverlay()
     {
         DrawPixelRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.01f, 0.03f, 0.06f, 0.72f));
 
         int panelWidth = Mathf.Min(700, Screen.width - 32);
-        int panelHeight = Mathf.Min(280, Screen.height - 32);
+        int panelHeight = Mathf.Min(340, Screen.height - 32);
         int panelX = (Screen.width - panelWidth) / 2;
         int panelY = (Screen.height - panelHeight) / 2;
         Rect panel = new Rect(panelX, panelY, panelWidth, panelHeight);
@@ -834,12 +841,24 @@ public class Snake : MonoBehaviour
         DrawPixelBorder(panel, 8, new Color(0.12f, 0.78f, 0.28f));
         DrawPixelBorder(new Rect(panelX + 15, panelY + 15, panelWidth - 30, panelHeight - 30), 3, new Color(0.28f, 0.43f, 0.5f));
 
-        int titleScale = Mathf.Min(10, Mathf.Max(5, (panelWidth - 80) / Mathf.Max(1, title.Length * 6)));
-        DrawCenteredPixelText(title, panelY + 48, titleScale, new Color(0f, 0f, 0f, 0.8f), 5);
-        DrawCenteredPixelText(title, panelY + 43, titleScale, new Color(1f, 0.9f, 0.25f), 0);
-        DrawPixelRect(new Rect(panelX + 70, panelY + 135, panelWidth - 140, 4), new Color(0.12f, 0.78f, 0.28f));
-        DrawCenteredPixelText(action, panelY + 165, 3, Color.white, 0);
-        DrawCenteredPixelText(footer, panelY + 220, 3, new Color(0.65f, 0.95f, 0.72f), 0);
+        DrawCenteredPixelText("PAUSA", panelY + 42, 9, new Color(0f, 0f, 0f, 0.8f), 5);
+        DrawCenteredPixelText("PAUSA", panelY + 37, 9, new Color(1f, 0.9f, 0.25f), 0);
+        DrawPixelRect(new Rect(panelX + 70, panelY + 115, panelWidth - 140, 4), new Color(0.12f, 0.78f, 0.28f));
+        DrawCenteredPixelText("SCORE " + score.ToString("D3"), panelY + 139, 3, new Color(0.65f, 0.95f, 0.72f), 0);
+
+        Rect continueButton = new Rect(panelX + 70, panelY + 195, 255, 58);
+        Rect homeButton = new Rect(panelX + panelWidth - 325, panelY + 195, 255, 58);
+        if (DrawPixelButton(continueButton, "CONTINUAR", true, 3))
+        {
+            paused = false;
+        }
+
+        if (DrawPixelButton(homeButton, "INICIO", false, 3))
+        {
+            ReturnToMainMenu();
+        }
+
+        DrawCenteredPixelText("P O ESC PARA SEGUIR", panelY + 286, 2, new Color(0.62f, 0.76f, 0.84f), 0);
     }
 
     private static void DrawAppleIcon(Rect destination)
