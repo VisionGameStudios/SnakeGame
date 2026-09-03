@@ -172,26 +172,44 @@ public class Snake : MonoBehaviour
 
     private void QueueDirection(Vector2Int newDirection)
     {
-        Vector2Int lastDirection = pendingDirections.Count > 0
-            ? pendingDirections.ToArray()[pendingDirections.Count - 1]
-            : direction;
+        Vector2Int[] queued = pendingDirections.ToArray();
+        Vector2Int lastDirection = queued.Length > 0 ? queued[queued.Length - 1] : direction;
 
-        if (newDirection != lastDirection && newDirection != -lastDirection && pendingDirections.Count < 2)
+        // Si ya hay dos giros guardados, mantenemos el primero (es el próximo
+        // paso seguro) y reemplazamos el segundo por la tecla más reciente.
+        // De esta forma ninguna intención válida se pierde por una cola llena.
+        if (pendingDirections.Count >= 2)
         {
-            pendingDirections.Enqueue(newDirection);
+            Vector2Int nextDirection = pendingDirections.Dequeue();
+            pendingDirections.Clear();
+            pendingDirections.Enqueue(nextDirection);
 
-            // Da feedback visual en el mismo frame. El cuerpo continúa moviéndose
-            // sobre la cuadrícula, pero el control ya no se siente retrasado.
-            if (pendingDirections.Count == 1)
+            if (newDirection != nextDirection && newDirection != -nextDirection)
             {
-                transform.rotation = RotationForHeadDirection(newDirection);
+                pendingDirections.Enqueue(newDirection);
+            }
 
-                // Si ya pasó una parte razonable del ciclo, ejecuta el giro en el
-                // siguiente Update sin permitir pasos instantáneos al hacer spam.
-                if (timer >= moveTime * 0.35f)
-                {
-                    timer = moveTime;
-                }
+            return;
+        }
+
+        if (newDirection == lastDirection || newDirection == -lastDirection)
+        {
+            return;
+        }
+
+        pendingDirections.Enqueue(newDirection);
+
+        // Da feedback visual en el mismo frame. El cuerpo continúa moviéndose
+        // sobre la cuadrícula, pero el control ya no se siente retrasado.
+        if (pendingDirections.Count == 1)
+        {
+            transform.rotation = RotationForHeadDirection(newDirection);
+
+            // Si ya pasó una parte razonable del ciclo, ejecuta el giro en el
+            // siguiente Update sin permitir pasos instantáneos al hacer spam.
+            if (timer >= moveTime * 0.35f)
+            {
+                timer = moveTime;
             }
         }
     }
