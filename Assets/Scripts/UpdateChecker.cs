@@ -69,6 +69,10 @@ public class UpdateChecker : MonoBehaviour
             return;
         }
 
+        // Los valores menores se dibujan delante en IMGUI. Así el menú del juego
+        // nunca puede ocultar el aviso de actualización.
+        GUI.depth = -1000;
+
         int width = Mathf.Min(520, Screen.width - 32);
         int height = 240;
         Rect panel = new Rect((Screen.width - width) / 2f, (Screen.height - height) / 2f, width, height);

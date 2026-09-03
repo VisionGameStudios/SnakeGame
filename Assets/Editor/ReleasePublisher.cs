@@ -14,13 +14,20 @@ public class ReleasePublisher : EditorWindow
 {
     private const string RepositoryOwner = "VisionGameStudios";
     private const string RepositoryName = "SnakeGame";
+    private const string KeychainService = "SnakeGame Unity Publisher";
 
     private string version = "1.0.1";
     private string releaseNotes = "Nueva versión de Snake.";
     private string githubToken = "";
+    private bool rememberToken = true;
     private bool mandatory;
     private bool publishing;
     private string status = "";
+
+    private void OnEnable()
+    {
+        githubToken = LoadTokenFromKeychain();
+    }
 
     [MenuItem("Tools/Snake/Publicar versión")]
     private static void OpenWindow()
@@ -43,6 +50,7 @@ public class ReleasePublisher : EditorWindow
             releaseNotes = EditorGUILayout.TextArea(releaseNotes, GUILayout.Height(70));
             mandatory = EditorGUILayout.Toggle("Actualización obligatoria", mandatory);
             githubToken = EditorGUILayout.PasswordField("GitHub token", githubToken);
+            rememberToken = EditorGUILayout.Toggle("Guardar en Llavero", rememberToken);
 
             GUILayout.Space(8);
             if (GUILayout.Button("GENERAR Y PUBLICAR", GUILayout.Height(38)))
@@ -76,6 +84,11 @@ public class ReleasePublisher : EditorWindow
         publishing = true;
         try
         {
+            if (rememberToken)
+                SaveTokenToKeychain(githubToken);
+            else
+                DeleteTokenFromKeychain();
+
             string normalizedVersion = parsedVersion.ToString(3);
             string projectRoot = Directory.GetParent(Application.dataPath).FullName;
 
@@ -100,7 +113,8 @@ public class ReleasePublisher : EditorWindow
         finally
         {
             publishing = false;
-            githubToken = "";
+            if (!rememberToken)
+                githubToken = "";
             Repaint();
         }
     }
@@ -270,6 +284,82 @@ public class ReleasePublisher : EditorWindow
             process.StandardError.ReadToEnd();
             process.WaitForExit();
             return process.ExitCode == 0;
+        }
+    }
+
+    private static string LoadTokenFromKeychain()
+    {
+        if (Application.platform != RuntimePlatform.OSXEditor)
+            return "";
+
+        ProcessStartInfo startInfo = new ProcessStartInfo
+        {
+            FileName = "/usr/bin/security",
+            Arguments = "find-generic-password -a \"" + RepositoryOwner + "\" -s \"" + KeychainService + "\" -w",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+
+        using (Process process = Process.Start(startInfo))
+        {
+            string token = process.StandardOutput.ReadToEnd().Trim();
+            process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            return process.ExitCode == 0 ? token : "";
+        }
+    }
+
+    private static void SaveTokenToKeychain(string token)
+    {
+        if (Application.platform != RuntimePlatform.OSXEditor)
+            return;
+
+        ProcessStartInfo startInfo = new ProcessStartInfo
+        {
+            FileName = "/bin/zsh",
+            Arguments = "-c \"IFS= read -r token; /usr/bin/security add-generic-password -U -a '"
+                + RepositoryOwner + "' -s '" + KeychainService + "' -w \\\"$token\\\"\"",
+            UseShellExecute = false,
+            RedirectStandardInput = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+
+        using (Process process = Process.Start(startInfo))
+        {
+            process.StandardInput.WriteLine(token);
+            process.StandardInput.Close();
+            process.StandardOutput.ReadToEnd();
+            string error = process.StandardError.ReadToEnd();
+            process.WaitForExit();
+            if (process.ExitCode != 0)
+                throw new InvalidOperationException("No se pudo guardar el token en el Llavero: " + error);
+        }
+    }
+
+    private static void DeleteTokenFromKeychain()
+    {
+        if (Application.platform != RuntimePlatform.OSXEditor)
+            return;
+
+        ProcessStartInfo startInfo = new ProcessStartInfo
+        {
+            FileName = "/usr/bin/security",
+            Arguments = "delete-generic-password -a \"" + RepositoryOwner + "\" -s \"" + KeychainService + "\"",
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
+        };
+
+        using (Process process = Process.Start(startInfo))
+        {
+            process.StandardOutput.ReadToEnd();
+            process.StandardError.ReadToEnd();
+            process.WaitForExit();
         }
     }
 
