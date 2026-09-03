@@ -202,7 +202,13 @@ public class UpdateChecker : MonoBehaviour
             yield break;
         }
 
-        string updaterSource = Path.Combine(Application.dataPath, "Resources", "Updater.app");
+        string appContentsPath = Directory.GetParent(Application.dataPath).FullName;
+        string updaterSource = Path.Combine(appContentsPath, "Updater.app");
+        if (!Directory.Exists(updaterSource))
+        {
+            updaterSource = Path.Combine(Application.dataPath, "Resources", "Updater.app");
+        }
+
         if (!Directory.Exists(updaterSource))
         {
             downloadError = "Este build no contiene el instalador automático.";
