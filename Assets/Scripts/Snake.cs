@@ -36,7 +36,9 @@ public class Snake : MonoBehaviour
         { 'C', new[] { "01111", "10000", "10000", "10000", "10000", "10000", "01111" } },
         { 'D', new[] { "11110", "10001", "10001", "10001", "10001", "10001", "11110" } },
         { 'E', new[] { "11111", "10000", "10000", "11110", "10000", "10000", "11111" } },
+        { 'F', new[] { "11111", "10000", "10000", "11110", "10000", "10000", "10000" } },
         { 'G', new[] { "01111", "10000", "10000", "10111", "10001", "10001", "01111" } },
+        { 'H', new[] { "10001", "10001", "10001", "11111", "10001", "10001", "10001" } },
         { 'I', new[] { "11111", "00100", "00100", "00100", "00100", "00100", "11111" } },
         { 'J', new[] { "00111", "00010", "00010", "00010", "10010", "10010", "01100" } },
         { 'K', new[] { "10001", "10010", "10100", "11000", "10100", "10010", "10001" } },
@@ -51,6 +53,7 @@ public class Snake : MonoBehaviour
         { 'U', new[] { "10001", "10001", "10001", "10001", "10001", "10001", "01110" } },
         { 'V', new[] { "10001", "10001", "10001", "10001", "10001", "01010", "00100" } },
         { 'W', new[] { "10001", "10001", "10001", "10101", "10101", "11011", "10001" } },
+        { 'X', new[] { "10001", "10001", "01010", "00100", "01010", "10001", "10001" } },
         { '0', new[] { "01110", "10001", "10011", "10101", "11001", "10001", "01110" } },
         { '1', new[] { "00100", "01100", "00100", "00100", "00100", "00100", "01110" } },
         { '2', new[] { "01110", "10001", "00001", "00010", "00100", "01000", "11111" } },
@@ -505,7 +508,10 @@ public class Snake : MonoBehaviour
     {
         if (!gameStarted)
         {
-            DrawMenuOverlay("SNAKE", "ESPACIO PARA JUGAR", "RECORD " + bestScore.ToString("D3"));
+            if (DrawStartOverlay())
+            {
+                gameStarted = true;
+            }
             return;
         }
 
@@ -547,7 +553,7 @@ public class Snake : MonoBehaviour
         }
 
         int panelWidth = Mathf.Min(900, Screen.width - 32);
-        int panelHeight = 270;
+        int panelHeight = 300;
         int panelX = (Screen.width - panelWidth) / 2;
         int panelY = (Screen.height - panelHeight) / 2;
 
@@ -561,11 +567,54 @@ public class Snake : MonoBehaviour
         DrawPixelRect(new Rect(panelX + 26, panelY + panelHeight - 44, 18, 18), new Color(1f, 0.9f, 0.3f));
         DrawPixelRect(new Rect(panelX + panelWidth - 44, panelY + panelHeight - 44, 18, 18), new Color(1f, 0.9f, 0.3f));
 
-        DrawCenteredPixelText("GAME OVER", panelY + 55, 10, new Color(0.01f, 0.02f, 0.04f), 6);
-        DrawCenteredPixelText("GAME OVER", panelY + 49, 10, new Color(1f, 0.9f, 0.3f), 0);
-        DrawPixelRect(new Rect(panelX + 90, panelY + 142, panelWidth - 180, 4), new Color(0.1f, 0.7f, 0.25f));
-        DrawCenteredPixelText("SCORE " + score.ToString("D3"), panelY + 164, 4, Color.white, 0);
-        DrawCenteredPixelText("PULSA R O ESPACIO PARA REINICIAR", panelY + 218, 3, new Color(0.7f, 0.95f, 0.76f), 0);
+        DrawCenteredPixelText("GAME OVER", panelY + 48, 9, new Color(0.01f, 0.02f, 0.04f), 5);
+        DrawCenteredPixelText("GAME OVER", panelY + 43, 9, new Color(1f, 0.9f, 0.3f), 0);
+        DrawPixelRect(new Rect(panelX + 90, panelY + 120, panelWidth - 180, 4), new Color(0.1f, 0.7f, 0.25f));
+        DrawCenteredPixelText("SCORE " + score.ToString("D3"), panelY + 145, 4, Color.white, 0);
+        DrawCenteredPixelText("RECORD " + bestScore.ToString("D3"), panelY + 185, 3, new Color(0.65f, 0.95f, 0.72f), 0);
+        DrawCenteredPixelText("R O ESPACIO PARA REINICIAR", panelY + 239, 3, new Color(1f, 0.9f, 0.3f), 0);
+    }
+
+    private bool DrawStartOverlay()
+    {
+        DrawPixelRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.01f, 0.03f, 0.06f, 0.76f));
+
+        int panelWidth = Mathf.Min(760, Screen.width - 32);
+        int panelHeight = Mathf.Min(420, Screen.height - 32);
+        int panelX = (Screen.width - panelWidth) / 2;
+        int panelY = (Screen.height - panelHeight) / 2;
+        Rect panel = new Rect(panelX, panelY, panelWidth, panelHeight);
+
+        DrawPixelRect(new Rect(panel.x + 12, panel.y + 12, panel.width, panel.height), new Color(0f, 0f, 0f, 0.55f));
+        DrawPixelRect(panel, new Color(0.04f, 0.09f, 0.15f, 0.98f));
+        DrawPixelBorder(panel, 8, new Color(0.24f, 0.9f, 0.46f));
+        DrawPixelBorder(new Rect(panel.x + 16, panel.y + 16, panel.width - 32, panel.height - 32), 3, new Color(0.28f, 0.43f, 0.5f));
+        DrawPixelRect(new Rect(panel.x + 8, panel.y + 8, panel.width - 16, 5), new Color(1f, 0.9f, 0.3f));
+
+        int titleScale = Mathf.Clamp((panelWidth - 100) / 35, 8, 14);
+        DrawCenteredPixelText("SNAKE", panelY + 50, titleScale, new Color(0f, 0f, 0f, 0.8f), 6);
+        DrawCenteredPixelText("SNAKE", panelY + 44, titleScale, new Color(1f, 0.9f, 0.25f), 0);
+        DrawCenteredPixelText("PIXEL ARCADE", panelY + 145, 3, new Color(0.65f, 0.95f, 0.72f), 0);
+
+        Rect playButton = new Rect(panelX + panelWidth / 2 - 150, panelY + 195, 300, 62);
+        bool hovered = playButton.Contains(Event.current.mousePosition);
+        DrawPixelRect(new Rect(playButton.x + 6, playButton.y + 6, playButton.width, playButton.height), new Color(0f, 0f, 0f, 0.5f));
+        DrawPixelRect(playButton, hovered ? new Color(1f, 0.94f, 0.5f) : new Color(1f, 0.84f, 0.25f));
+        DrawPixelBorder(playButton, 4, new Color(0.08f, 0.16f, 0.2f));
+        DrawCenteredPixelText("JUGAR", Mathf.RoundToInt(playButton.y + 17), 4, new Color(0.03f, 0.08f, 0.12f), 0);
+
+        DrawCenteredPixelText("ESPACIO O ENTER", panelY + 278, 2, Color.white, 0);
+        DrawPixelRect(new Rect(panelX + 70, panelY + 316, panelWidth - 140, 3), new Color(0.12f, 0.58f, 0.34f));
+        DrawCenteredPixelText("WASD O FLECHAS", panelY + 337, 2, new Color(0.65f, 0.8f, 0.88f), 0);
+        DrawCenteredPixelText("RECORD " + bestScore.ToString("D3"), panelY + 377, 3, new Color(1f, 0.9f, 0.3f), 0);
+
+        if (Event.current.type == EventType.MouseUp && Event.current.button == 0 && hovered)
+        {
+            Event.current.Use();
+            return true;
+        }
+
+        return false;
     }
 
     private static void DrawMenuOverlay(string title, string action, string footer)

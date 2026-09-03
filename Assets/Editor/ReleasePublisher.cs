@@ -184,17 +184,34 @@ public class ReleasePublisher : EditorWindow
         if (report.summary.result != BuildResult.Succeeded)
             throw new InvalidOperationException("El build falló. Revisa la consola de Unity.");
 
+        string executablePath = Path.Combine(buildFolder, executableName);
         if (target == BuildTarget.StandaloneOSX)
-            BuildUpdaterApp(projectRoot, Path.Combine(buildFolder, executableName));
+            BuildUpdaterApp(projectRoot, executablePath);
 
         string archivePath = Path.Combine(projectRoot, "Builds", "Snake-" + normalizedVersion + "-" + target + ".zip");
         if (File.Exists(archivePath)) File.Delete(archivePath);
-        ZipFile.CreateFromDirectory(
-            buildFolder,
-            archivePath,
-            System.IO.Compression.CompressionLevel.Optimal,
-            false
-        );
+
+        if (target == BuildTarget.StandaloneOSX)
+        {
+            // ZipFile no conserva los bits ejecutables Unix y produce una .app
+            // que macOS no puede abrir. ditto preserva permisos y resource forks.
+            RunProcess(
+                "/usr/bin/ditto",
+                "-c -k --sequesterRsrc --keepParent \"" + executablePath + "\" \"" + archivePath + "\"",
+                projectRoot,
+                null
+            );
+        }
+        else
+        {
+            ZipFile.CreateFromDirectory(
+                buildFolder,
+                archivePath,
+                System.IO.Compression.CompressionLevel.Optimal,
+                false
+            );
+        }
+
         return archivePath;
     }
 
