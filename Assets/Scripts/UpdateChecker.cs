@@ -40,25 +40,35 @@ public class UpdateChecker : MonoBehaviour
 
     private IEnumerator CheckForUpdates()
     {
-        using (UnityWebRequest request = UnityWebRequest.Get(VersionUrl))
+        // El parámetro evita que GitHub/CDN o un proxy entregue un version.json
+        // guardado de una publicación anterior.
+        string uncachedUrl = VersionUrl + "?t=" + DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        using (UnityWebRequest request = UnityWebRequest.Get(uncachedUrl))
         {
             request.timeout = 8;
+            request.SetRequestHeader("Cache-Control", "no-cache");
             yield return request.SendWebRequest();
 
             if (request.result != UnityWebRequest.Result.Success)
             {
+                Debug.LogWarning("No se pudo comprobar si hay actualizaciones: " + request.error);
                 yield break;
             }
 
             remoteVersion = JsonUtility.FromJson<VersionInfo>(request.downloadHandler.text);
             if (remoteVersion == null || string.IsNullOrWhiteSpace(remoteVersion.latestVersion))
             {
+                Debug.LogWarning("El archivo remoto version.json no contiene una versión válida.");
                 yield break;
             }
 
             showUpdate = CompareVersions(remoteVersion.latestVersion, Application.version) > 0;
             mandatoryUpdate = !string.IsNullOrWhiteSpace(remoteVersion.minimumVersion)
                 && CompareVersions(remoteVersion.minimumVersion, Application.version) > 0;
+
+            Debug.Log("Actualizaciones: instalada " + Application.version
+                + ", disponible " + remoteVersion.latestVersion
+                + (showUpdate ? " (se mostrará el aviso)." : " (está al día)."));
         }
     }
 
@@ -73,8 +83,8 @@ public class UpdateChecker : MonoBehaviour
         // nunca puede ocultar el aviso de actualización.
         GUI.depth = -1000;
 
-        int width = Mathf.Min(520, Screen.width - 32);
-        int height = 240;
+        int width = Mathf.Min(600, Screen.width - 32);
+        int height = Mathf.Min(280, Screen.height - 32);
         Rect panel = new Rect((Screen.width - width) / 2f, (Screen.height - height) / 2f, width, height);
 
         GUI.color = new Color(0.04f, 0.08f, 0.14f, 0.98f);
@@ -84,7 +94,7 @@ public class UpdateChecker : MonoBehaviour
         GUIStyle title = new GUIStyle(GUI.skin.label)
         {
             alignment = TextAnchor.MiddleCenter,
-            fontSize = 28,
+            fontSize = 32,
             fontStyle = FontStyle.Bold
         };
         title.normal.textColor = new Color(1f, 0.9f, 0.3f);
@@ -92,21 +102,21 @@ public class UpdateChecker : MonoBehaviour
         GUIStyle body = new GUIStyle(GUI.skin.label)
         {
             alignment = TextAnchor.MiddleCenter,
-            fontSize = 16,
+            fontSize = 18,
             wordWrap = true
         };
         body.normal.textColor = Color.white;
 
-        GUI.Label(new Rect(panel.x + 20, panel.y + 20, panel.width - 40, 45), "NUEVA VERSION", title);
-        GUI.Label(new Rect(panel.x + 35, panel.y + 72, panel.width - 70, 60), remoteVersion.message, body);
-        GUI.Label(new Rect(panel.x + 35, panel.y + 125, panel.width - 70, 28), Application.version + "  >  " + remoteVersion.latestVersion, body);
+        GUI.Label(new Rect(panel.x + 20, panel.y + 24, panel.width - 40, 50), "NUEVA VERSION", title);
+        GUI.Label(new Rect(panel.x + 40, panel.y + 82, panel.width - 80, 66), remoteVersion.message, body);
+        GUI.Label(new Rect(panel.x + 40, panel.y + 145, panel.width - 80, 30), Application.version + "  >  " + remoteVersion.latestVersion, body);
 
-        if (GUI.Button(new Rect(panel.x + panel.width / 2f - 155, panel.y + 175, 145, 42), "ACTUALIZAR"))
+        if (GUI.Button(new Rect(panel.x + panel.width / 2f - 175, panel.y + panel.height - 65, 165, 45), "ACTUALIZAR"))
         {
             Application.OpenURL(remoteVersion.downloadUrl);
         }
 
-        if (!mandatoryUpdate && GUI.Button(new Rect(panel.x + panel.width / 2f + 10, panel.y + 175, 145, 42), "MAS TARDE"))
+        if (!mandatoryUpdate && GUI.Button(new Rect(panel.x + panel.width / 2f + 10, panel.y + panel.height - 65, 165, 45), "MAS TARDE"))
         {
             showUpdate = false;
         }

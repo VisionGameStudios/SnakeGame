@@ -27,6 +27,7 @@ public class ReleasePublisher : EditorWindow
     private void OnEnable()
     {
         githubToken = LoadTokenFromKeychain();
+        version = NextPatchVersion(PlayerSettings.bundleVersion);
     }
 
     [MenuItem("Tools/Snake/Publicar versión")]
@@ -72,6 +73,18 @@ public class ReleasePublisher : EditorWindow
         if (!Version.TryParse(NormalizeVersion(version), out parsedVersion))
         {
             EditorUtility.DisplayDialog("Versión inválida", "Usa un formato como 1.1.0.", "Aceptar");
+            return;
+        }
+
+        Version currentVersion;
+        if (Version.TryParse(NormalizeVersion(PlayerSettings.bundleVersion), out currentVersion)
+            && parsedVersion <= currentVersion)
+        {
+            EditorUtility.DisplayDialog(
+                "Versión no incrementada",
+                "La nueva versión debe ser mayor que " + currentVersion.ToString(3) + ". Prueba con " + NextPatchVersion(currentVersion.ToString(3)) + ".",
+                "Aceptar"
+            );
             return;
         }
 
@@ -130,6 +143,15 @@ public class ReleasePublisher : EditorWindow
             + "  \"message\": \"" + escapedNotes + "\"\n"
             + "}\n";
         File.WriteAllText(Path.Combine(projectRoot, "version.json"), json);
+    }
+
+    private static string NextPatchVersion(string current)
+    {
+        Version parsed;
+        if (!Version.TryParse(NormalizeVersion(current), out parsed))
+            return "1.0.1";
+
+        return parsed.Major + "." + parsed.Minor + "." + (parsed.Build + 1);
     }
 
     private static string BuildAndArchive(string projectRoot, string normalizedVersion)

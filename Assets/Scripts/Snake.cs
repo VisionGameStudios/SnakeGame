@@ -394,16 +394,9 @@ public class Snake : MonoBehaviour
 
     private static Quaternion RotationForBodyDirection(Vector2Int lookDirection)
     {
-        float angle;
-
-        if (lookDirection == Vector2Int.right)
-            angle = -90f;
-        else if (lookDirection == Vector2Int.down)
-            angle = 180f;
-        else if (lookDirection == Vector2Int.left)
-            angle = 90f;
-        else
-            angle = 0f;
+        // El sprite nuevo está dibujado horizontalmente. Solo hace falta
+        // girarlo un cuarto de vuelta cuando el segmento avanza en vertical.
+        float angle = lookDirection.x == 0 ? 90f : 0f;
 
         return Quaternion.Euler(0f, 0f, angle);
     }
