@@ -12,6 +12,7 @@ using UnityEngine;
 
 public class ReleasePublisher : EditorWindow
 {
+    private const string PublisherRevision = "2026.09.03.2";
     private const string RepositoryOwner = "VisionGameStudios";
     private const string RepositoryName = "SnakeGame";
     private const string KeychainService = "SnakeGame Unity Publisher";
@@ -40,6 +41,7 @@ public class ReleasePublisher : EditorWindow
     {
         GUILayout.Space(10);
         EditorGUILayout.LabelField("Publicar nueva versión", EditorStyles.boldLabel);
+        EditorGUILayout.LabelField("Publicador " + PublisherRevision, EditorStyles.miniLabel);
         EditorGUILayout.HelpBox(
             "Genera el build de la plataforma activa, actualiza version.json, publica el código y crea un GitHub Release.",
             MessageType.Info
@@ -104,6 +106,8 @@ public class ReleasePublisher : EditorWindow
             return;
         }
 
+        string previousBundleVersion = PlayerSettings.bundleVersion;
+        bool sourcePublished = false;
         publishing = true;
         try
         {
@@ -124,6 +128,7 @@ public class ReleasePublisher : EditorWindow
             WriteVersionManifest(projectRoot, normalizedVersion, archivePath);
             AssetDatabase.Refresh();
             CommitAndPush(projectRoot, normalizedVersion);
+            sourcePublished = true;
             CreateRelease(normalizedVersion, archivePath, installerPath);
 
             status = "Versión " + normalizedVersion + " publicada correctamente.";
@@ -131,6 +136,11 @@ public class ReleasePublisher : EditorWindow
         }
         catch (Exception exception)
         {
+            if (!sourcePublished && PlayerSettings.bundleVersion != previousBundleVersion)
+            {
+                PlayerSettings.bundleVersion = previousBundleVersion;
+                AssetDatabase.SaveAssets();
+            }
             status = "No se pudo publicar: " + exception.Message;
             UnityEngine.Debug.LogException(exception);
             EditorUtility.DisplayDialog("Error al publicar", status, "Aceptar");
@@ -197,27 +207,49 @@ public class ReleasePublisher : EditorWindow
             throw new InvalidOperationException("El build falló. Revisa la consola de Unity.");
 
         string executablePath = Path.Combine(buildFolder, executableName);
-        if (target == BuildTarget.StandaloneOSX)
-        {
-            BuildUpdaterApp(projectRoot, executablePath);
-            SignAndVerifyMacApp(projectRoot, executablePath);
-        }
-
+        string packageExecutablePath = executablePath;
+        string signingStagingFolder = null;
         string archivePath = Path.Combine(projectRoot, "Builds", "Snake-" + normalizedVersion + "-" + target + ".zip");
         if (File.Exists(archivePath)) File.Delete(archivePath);
 
         if (target == BuildTarget.StandaloneOSX)
         {
-            // ZipFile no conserva los bits ejecutables Unix y produce una .app
-            // que macOS no puede abrir. ditto preserva permisos y resource forks.
-            RunProcess(
-                "/usr/bin/ditto",
-                "-c -k --sequesterRsrc --keepParent \"" + executablePath + "\" \"" + archivePath + "\"",
-                projectRoot,
-                null
+            // Desktop/iCloud File Provider puede volver a añadir FinderInfo apenas
+            // se elimina. Se firma y empaqueta fuera del Escritorio para evitarlo.
+            signingStagingFolder = Path.Combine(
+                Path.GetTempPath(),
+                "SnakeSigning-" + normalizedVersion + "-" + Process.GetCurrentProcess().Id
             );
+            if (Directory.Exists(signingStagingFolder)) Directory.Delete(signingStagingFolder, true);
+            Directory.CreateDirectory(signingStagingFolder);
+            packageExecutablePath = Path.Combine(signingStagingFolder, executableName);
 
-            installerPath = CreateMacInstaller(projectRoot, executablePath, normalizedVersion);
+            try
+            {
+                RunProcess(
+                    "/usr/bin/ditto",
+                    "--norsrc \"" + executablePath + "\" \"" + packageExecutablePath + "\"",
+                    projectRoot,
+                    null
+                );
+                BuildUpdaterApp(projectRoot, packageExecutablePath);
+                SignAndVerifyMacApp(projectRoot, packageExecutablePath);
+
+                // ZipFile no conserva los bits ejecutables Unix. ditto sí conserva
+                // permisos y el bundle ya firmado, sin copiar metadata de Finder.
+                RunProcess(
+                    "/usr/bin/ditto",
+                    "-c -k --keepParent \"" + packageExecutablePath + "\" \"" + archivePath + "\"",
+                    projectRoot,
+                    null
+                );
+
+                installerPath = CreateMacInstaller(projectRoot, packageExecutablePath, normalizedVersion);
+            }
+            finally
+            {
+                if (Directory.Exists(signingStagingFolder)) Directory.Delete(signingStagingFolder, true);
+            }
         }
         else
         {
@@ -350,6 +382,8 @@ public class ReleasePublisher : EditorWindow
         // Finder y los proveedores de archivos pueden añadir resource forks/xattrs
         // que codesign rechaza como "detritus not allowed".
         RunProcess("/usr/bin/xattr", "-cr \"" + gameAppPath + "\"", projectRoot, null);
+        DeleteExtendedAttribute(projectRoot, gameAppPath, "com.apple.FinderInfo");
+        DeleteExtendedAttribute(projectRoot, gameAppPath, "com.apple.ResourceFork");
 
         if (Directory.Exists(updaterApp))
         {
@@ -414,6 +448,13 @@ public class ReleasePublisher : EditorWindow
         }
 
         return null;
+    }
+
+    private static void DeleteExtendedAttribute(string projectRoot, string path, string attribute)
+    {
+        // xattr devuelve error si el atributo no existe; en ese caso no hay nada
+        // que limpiar y se puede continuar.
+        ProcessSucceeds("/usr/bin/xattr", "-dr " + attribute + " \"" + path + "\"", projectRoot);
     }
 
     private static string ComputeSha256(string path)
