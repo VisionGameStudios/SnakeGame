@@ -159,10 +159,8 @@ public class ReleasePublisher : EditorWindow
             RunProcess("git", "commit -m \"Release v" + normalizedVersion + "\"", projectRoot, null);
         }
 
-        if (!ProcessSucceeds("git", "rev-parse -q --verify refs/tags/v" + normalizedVersion, projectRoot))
-        {
-            RunProcess("git", "tag -a v" + normalizedVersion + " -m \"Release v" + normalizedVersion + "\"", projectRoot, null);
-        }
+        // Permite reintentar una publicación fallida moviendo el tag local al commit actual.
+        RunProcess("git", "tag -f -a v" + normalizedVersion + " -m \"Release v" + normalizedVersion + "\"", projectRoot, null);
 
         string askPassPath = Path.Combine(Path.GetTempPath(), "snake-git-askpass.sh");
         File.WriteAllText(askPassPath, "#!/bin/sh\ncase \"$1\" in *Username*) echo x-access-token;; *) echo \"$GITHUB_TOKEN\";; esac\n");
