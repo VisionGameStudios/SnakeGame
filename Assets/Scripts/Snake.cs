@@ -699,7 +699,7 @@ public class Snake : MonoBehaviour
         int titleScale = Mathf.Clamp((panelWidth - 100) / 35, 8, 14);
         DrawCenteredPixelText("SNAKE", panelY + 50, titleScale, new Color(0f, 0f, 0f, 0.8f), 6);
         DrawCenteredPixelText("SNAKE", panelY + 44, titleScale, new Color(1f, 0.9f, 0.25f), 0);
-        DrawCenteredPixelText("PIXEL ARCADE", panelY + 145, 3, new Color(0.65f, 0.95f, 0.72f), 0);
+        DrawCenteredPixelText("Game", panelY + 145, 3, new Color(0.65f, 0.95f, 0.72f), 0);
 
         Rect playButton = new Rect(panelX + panelWidth / 2 - 260, panelY + 195, 245, 62);
         Rect settingsButton = new Rect(panelX + panelWidth / 2 + 15, panelY + 195, 245, 62);
