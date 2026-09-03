@@ -212,12 +212,9 @@ public class Snake : MonoBehaviour
         {
             transform.rotation = RotationForHeadDirection(newDirection);
 
-            // Si ya pasó una parte razonable del ciclo, ejecuta el giro en el
-            // siguiente Update sin permitir pasos instantáneos al hacer spam.
-            if (timer >= moveTime * 0.35f)
-            {
-                timer = moveTime;
-            }
+            // Mantiene el movimiento sobre la cuadrícula, pero limita la espera
+            // de una entrada nueva a una fracción muy corta del ciclo.
+            timer = Mathf.Max(timer, Mathf.Max(0f, moveTime - 0.02f));
         }
     }
 
