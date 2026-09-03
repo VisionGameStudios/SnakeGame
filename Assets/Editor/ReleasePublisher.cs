@@ -106,11 +106,12 @@ public class ReleasePublisher : EditorWindow
             string projectRoot = Directory.GetParent(Application.dataPath).FullName;
 
             PlayerSettings.bundleVersion = normalizedVersion;
-            WriteVersionManifest(projectRoot, normalizedVersion);
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
             string archivePath = BuildAndArchive(projectRoot, normalizedVersion);
+            WriteVersionManifest(projectRoot, normalizedVersion, archivePath);
+            AssetDatabase.Refresh();
             CommitAndPush(projectRoot, normalizedVersion);
             CreateRelease(normalizedVersion, archivePath);
 
@@ -132,14 +133,21 @@ public class ReleasePublisher : EditorWindow
         }
     }
 
-    private void WriteVersionManifest(string projectRoot, string normalizedVersion)
+    private void WriteVersionManifest(string projectRoot, string normalizedVersion, string archivePath)
     {
         string minimumVersion = mandatory ? normalizedVersion : "1.0.0";
+        string archiveName = Path.GetFileName(archivePath);
+        string archiveUrl = "https://github.com/" + RepositoryOwner + "/" + RepositoryName
+            + "/releases/download/v" + normalizedVersion + "/" + Uri.EscapeDataString(archiveName);
+        string sha256 = ComputeSha256(archivePath);
+        long size = new FileInfo(archivePath).Length;
         string escapedNotes = releaseNotes.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n");
         string json = "{\n"
             + "  \"latestVersion\": \"" + normalizedVersion + "\",\n"
             + "  \"minimumVersion\": \"" + minimumVersion + "\",\n"
-            + "  \"downloadUrl\": \"https://github.com/" + RepositoryOwner + "/" + RepositoryName + "/releases/latest\",\n"
+            + "  \"downloadUrl\": \"" + archiveUrl + "\",\n"
+            + "  \"sha256\": \"" + sha256 + "\",\n"
+            + "  \"size\": " + size + ",\n"
             + "  \"message\": \"" + escapedNotes + "\"\n"
             + "}\n";
         File.WriteAllText(Path.Combine(projectRoot, "version.json"), json);
@@ -176,6 +184,9 @@ public class ReleasePublisher : EditorWindow
         if (report.summary.result != BuildResult.Succeeded)
             throw new InvalidOperationException("El build falló. Revisa la consola de Unity.");
 
+        if (target == BuildTarget.StandaloneOSX)
+            BuildUpdaterApp(projectRoot, Path.Combine(buildFolder, executableName));
+
         string archivePath = Path.Combine(projectRoot, "Builds", "Snake-" + normalizedVersion + "-" + target + ".zip");
         if (File.Exists(archivePath)) File.Delete(archivePath);
         ZipFile.CreateFromDirectory(
@@ -185,6 +196,35 @@ public class ReleasePublisher : EditorWindow
             false
         );
         return archivePath;
+    }
+
+    private static void BuildUpdaterApp(string projectRoot, string gameAppPath)
+    {
+        string sourcePath = Path.Combine(projectRoot, "Assets", "Editor", "Updater", "Updater.swift");
+        if (!File.Exists(sourcePath))
+            throw new InvalidOperationException("No se encontró Assets/Editor/Updater/Updater.swift.");
+
+        string updaterApp = Path.Combine(gameAppPath, "Contents", "Resources", "Updater.app");
+        string executablePath = Path.Combine(updaterApp, "Contents", "MacOS", "SnakeUpdater");
+        string infoPath = Path.Combine(updaterApp, "Contents", "Info.plist");
+        Directory.CreateDirectory(Path.GetDirectoryName(executablePath));
+        File.WriteAllText(infoPath,
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+            + "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
+            + "<plist version=\"1.0\"><dict>"
+            + "<key>CFBundleExecutable</key><string>SnakeUpdater</string>"
+            + "<key>CFBundleIdentifier</key><string>com.visiongamestudios.snake.updater</string>"
+            + "<key>CFBundleName</key><string>SnakeUpdater</string>"
+            + "<key>CFBundlePackageType</key><string>APPL</string>"
+            + "</dict></plist>\n");
+        RunProcess("/usr/bin/xcrun", "swiftc \"" + sourcePath + "\" -o \"" + executablePath + "\"", projectRoot, null);
+    }
+
+    private static string ComputeSha256(string path)
+    {
+        using (var sha256 = System.Security.Cryptography.SHA256.Create())
+        using (FileStream stream = File.OpenRead(path))
+            return BitConverter.ToString(sha256.ComputeHash(stream)).Replace("-", "").ToLowerInvariant();
     }
 
     private void CommitAndPush(string projectRoot, string normalizedVersion)

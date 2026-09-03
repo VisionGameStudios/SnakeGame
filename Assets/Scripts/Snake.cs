@@ -521,6 +521,13 @@ public class Snake : MonoBehaviour
         string scoreText = score.ToString("D3");
         DrawPixelText(scoreText, hudX + 60, 20, 4, new Color(1f, 0.9f, 0.3f));
 
+        string recordText = "RECORD " + bestScore.ToString("D3");
+        int recordPixelSize = 3;
+        int recordWidth = (recordText.Length * 6 - 1) * recordPixelSize;
+        int recordX = Mathf.RoundToInt(Screen.width * 0.715f) - recordWidth / 2;
+        DrawPixelText(recordText, recordX + 2, 24, recordPixelSize, new Color(0.01f, 0.02f, 0.04f, 0.8f));
+        DrawPixelText(recordText, recordX, 22, recordPixelSize, new Color(1f, 0.9f, 0.3f));
+
         if (paused)
         {
             DrawMenuOverlay("PAUSA", "P O ESC PARA SEGUIR", "SCORE " + score.ToString("D3"));

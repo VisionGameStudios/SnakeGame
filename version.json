@@ -1,6 +1,8 @@
 {
-  "latestVersion": "1.0.7",
-  "minimumVersion": "1.0.7",
-  "downloadUrl": "https://github.com/VisionGameStudios/SnakeGame/releases/latest",
-  "message": "Nueva versión de Snake."
+  "latestVersion": "1.0.8",
+  "minimumVersion": "1.0.8",
+  "downloadUrl": "https://github.com/VisionGameStudios/SnakeGame/releases/download/v1.0.8/Snake-1.0.8-StandaloneOSX.zip",
+  "sha256": "7435d681b7929ed7b4d70e499064107ccd15553b5762925b97749c8a456609e2",
+  "size": 33699960,
+  "message": "Nueva versión de Snake. 5ta versión estable"
 }
