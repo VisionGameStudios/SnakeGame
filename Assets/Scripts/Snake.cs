@@ -18,9 +18,22 @@ public class Snake : MonoBehaviour
     private static Sprite headSprite;
     private static Sprite deadHeadSprite;
     private static Sprite appleUiSprite;
+    private static Material skinMaterial;
+    private static int activeSkinIndex;
+    private static readonly Color[] SkinColors =
+    {
+        new Color(0.52f, 0.9f, 0.3f),
+        new Color(0.28f, 0.58f, 0.95f),
+        new Color(0.98f, 0.72f, 0.2f),
+        new Color(0.92f, 0.32f, 0.4f),
+        new Color(0.62f, 0.34f, 0.88f)
+    };
     private bool gameOver;
     private bool gameStarted;
     private bool paused;
+    private bool settingsOpen;
+    private int pendingSkinIndex;
+    private float pendingVolume;
     private int score;
     private int bestScore;
     private AudioSource audioSource;
@@ -54,6 +67,8 @@ public class Snake : MonoBehaviour
         { 'V', new[] { "10001", "10001", "10001", "10001", "10001", "01010", "00100" } },
         { 'W', new[] { "10001", "10001", "10001", "10101", "10101", "11011", "10001" } },
         { 'X', new[] { "10001", "10001", "01010", "00100", "01010", "10001", "10001" } },
+        { '+', new[] { "00000", "00100", "00100", "11111", "00100", "00100", "00000" } },
+        { '-', new[] { "00000", "00000", "00000", "11111", "00000", "00000", "00000" } },
         { '0', new[] { "01110", "10001", "10011", "10101", "11001", "10001", "01110" } },
         { '1', new[] { "00100", "01100", "00100", "00100", "00100", "00100", "01110" } },
         { '2', new[] { "01110", "10001", "00001", "00010", "00100", "01000", "11111" } },
@@ -69,6 +84,11 @@ public class Snake : MonoBehaviour
     private void Start()
     {
         bestScore = PlayerPrefs.GetInt("SnakeBestScore", 0);
+        activeSkinIndex = Mathf.Clamp(PlayerPrefs.GetInt("SnakeSkin", 0), 0, SkinColors.Length - 1);
+        pendingSkinIndex = activeSkinIndex;
+        pendingVolume = Mathf.Clamp01(PlayerPrefs.GetFloat("SnakeVolume", 1f));
+        AudioListener.volume = pendingVolume;
+        ApplySkinColor(activeSkinIndex);
         ConfigureAudio();
         ConfigureSegment(transform);
 
@@ -91,6 +111,15 @@ public class Snake : MonoBehaviour
     {
         if (!gameStarted)
         {
+            if (settingsOpen)
+            {
+                if (Input.GetKeyDown(KeyCode.Escape))
+                {
+                    CancelSettings();
+                }
+                return;
+            }
+
             if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return))
             {
                 gameStarted = true;
@@ -242,6 +271,7 @@ public class Snake : MonoBehaviour
         }
 
         renderer.color = Color.white;
+        renderer.sharedMaterial = GetSkinMaterial();
 
         if (segment.GetComponent<Collider2D>() == null)
         {
@@ -255,6 +285,32 @@ public class Snake : MonoBehaviour
             Rigidbody2D body = segment.gameObject.AddComponent<Rigidbody2D>();
             body.bodyType = RigidbodyType2D.Kinematic;
             body.gravityScale = 0f;
+        }
+    }
+
+    private static Material GetSkinMaterial()
+    {
+        if (skinMaterial == null)
+        {
+            Shader shader = Resources.Load<Shader>("SnakeRecolor");
+            if (shader != null)
+            {
+                skinMaterial = new Material(shader);
+                skinMaterial.name = "Snake Skin (Runtime)";
+                skinMaterial.SetColor("_SkinColor", SkinColors[Mathf.Clamp(activeSkinIndex, 0, SkinColors.Length - 1)]);
+            }
+        }
+
+        return skinMaterial;
+    }
+
+    private static void ApplySkinColor(int skinIndex)
+    {
+        int validSkinIndex = Mathf.Clamp(skinIndex, 0, SkinColors.Length - 1);
+        Material material = GetSkinMaterial();
+        if (material != null)
+        {
+            material.SetColor("_SkinColor", SkinColors[validSkinIndex]);
         }
     }
 
@@ -508,6 +564,12 @@ public class Snake : MonoBehaviour
     {
         if (!gameStarted)
         {
+            if (settingsOpen)
+            {
+                DrawSettingsOverlay();
+                return;
+            }
+
             if (DrawStartOverlay())
             {
                 gameStarted = true;
@@ -596,25 +658,165 @@ public class Snake : MonoBehaviour
         DrawCenteredPixelText("SNAKE", panelY + 44, titleScale, new Color(1f, 0.9f, 0.25f), 0);
         DrawCenteredPixelText("PIXEL ARCADE", panelY + 145, 3, new Color(0.65f, 0.95f, 0.72f), 0);
 
-        Rect playButton = new Rect(panelX + panelWidth / 2 - 150, panelY + 195, 300, 62);
-        bool hovered = playButton.Contains(Event.current.mousePosition);
-        DrawPixelRect(new Rect(playButton.x + 6, playButton.y + 6, playButton.width, playButton.height), new Color(0f, 0f, 0f, 0.5f));
-        DrawPixelRect(playButton, hovered ? new Color(1f, 0.94f, 0.5f) : new Color(1f, 0.84f, 0.25f));
-        DrawPixelBorder(playButton, 4, new Color(0.08f, 0.16f, 0.2f));
-        DrawCenteredPixelText("JUGAR", Mathf.RoundToInt(playButton.y + 17), 4, new Color(0.03f, 0.08f, 0.12f), 0);
+        Rect playButton = new Rect(panelX + panelWidth / 2 - 260, panelY + 195, 245, 62);
+        Rect settingsButton = new Rect(panelX + panelWidth / 2 + 15, panelY + 195, 245, 62);
+        bool playClicked = DrawPixelButton(playButton, "JUGAR", true, 4);
+        if (DrawPixelButton(settingsButton, "AJUSTES", false, 3))
+        {
+            pendingSkinIndex = activeSkinIndex;
+            pendingVolume = AudioListener.volume;
+            settingsOpen = true;
+        }
 
         DrawCenteredPixelText("ESPACIO O ENTER", panelY + 278, 2, Color.white, 0);
         DrawPixelRect(new Rect(panelX + 70, panelY + 316, panelWidth - 140, 3), new Color(0.12f, 0.58f, 0.34f));
         DrawCenteredPixelText("WASD O FLECHAS", panelY + 337, 2, new Color(0.65f, 0.8f, 0.88f), 0);
         DrawCenteredPixelText("RECORD " + bestScore.ToString("D3"), panelY + 377, 3, new Color(1f, 0.9f, 0.3f), 0);
 
-        if (Event.current.type == EventType.MouseUp && Event.current.button == 0 && hovered)
+        return playClicked;
+    }
+
+    private void DrawSettingsOverlay()
+    {
+        DrawPixelRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.01f, 0.03f, 0.06f, 0.82f));
+
+        int panelWidth = Mathf.Min(900, Screen.width - 32);
+        int panelHeight = Mathf.Min(520, Screen.height - 32);
+        int panelX = (Screen.width - panelWidth) / 2;
+        int panelY = (Screen.height - panelHeight) / 2;
+        Rect panel = new Rect(panelX, panelY, panelWidth, panelHeight);
+
+        DrawPixelRect(new Rect(panel.x + 12, panel.y + 12, panel.width, panel.height), new Color(0f, 0f, 0f, 0.55f));
+        DrawPixelRect(panel, new Color(0.04f, 0.09f, 0.15f, 0.99f));
+        DrawPixelBorder(panel, 6, new Color(0.48f, 0.9f, 0.58f));
+        DrawPixelBorder(new Rect(panel.x + 14, panel.y + 14, panel.width - 28, panel.height - 28), 2, new Color(0.25f, 0.42f, 0.5f));
+
+        DrawCenteredPixelText("AJUSTES", panelY + 35, 7, new Color(1f, 0.9f, 0.3f), 0);
+        DrawPixelRect(new Rect(panelX + 55, panelY + 105, panelWidth - 110, 3), new Color(0.3f, 0.78f, 0.5f));
+        DrawCenteredPixelText("COLOR DEL GUSANO", panelY + 124, 3, Color.white, 0);
+
+        float cardGap = 10f;
+        float cardsAreaWidth = panelWidth - 90f;
+        float cardWidth = (cardsAreaWidth - cardGap * (SkinColors.Length - 1)) / SkinColors.Length;
+        float cardsX = panelX + 45f;
+        float cardsY = panelY + 172f;
+        for (int i = 0; i < SkinColors.Length; i++)
         {
-            Event.current.Use();
-            return true;
+            Rect card = new Rect(cardsX + i * (cardWidth + cardGap), cardsY, cardWidth, 112f);
+            bool selected = pendingSkinIndex == i;
+            bool hovered = card.Contains(Event.current.mousePosition);
+            DrawPixelRect(new Rect(card.x + 4, card.y + 4, card.width, card.height), new Color(0f, 0f, 0f, 0.45f));
+            DrawPixelRect(card, hovered ? new Color(0.11f, 0.2f, 0.29f) : new Color(0.07f, 0.14f, 0.22f));
+            DrawPixelBorder(card, selected ? 4 : 2, selected ? new Color(1f, 0.9f, 0.3f) : new Color(0.3f, 0.75f, 0.48f));
+            DrawWormPreview(card, SkinColors[i]);
+
+            if (selected)
+            {
+                DrawPixelRect(new Rect(card.xMax - 18, card.y + 9, 5, 14), new Color(1f, 0.9f, 0.3f));
+                DrawPixelRect(new Rect(card.xMax - 13, card.y + 17, 10, 5), new Color(1f, 0.9f, 0.3f));
+            }
+
+            if (IsLeftClick(card))
+            {
+                pendingSkinIndex = i;
+                ApplySkinColor(i);
+            }
         }
 
-        return false;
+        DrawPixelRect(new Rect(panelX + 55, panelY + 313, panelWidth - 110, 3), new Color(0.3f, 0.78f, 0.5f));
+        DrawCenteredPixelText("SONIDO", panelY + 332, 3, Color.white, 0);
+
+        Rect minusButton = new Rect(panelX + panelWidth / 2 - 205, panelY + 372, 58, 48);
+        Rect plusButton = new Rect(panelX + panelWidth / 2 + 147, panelY + 372, 58, 48);
+        if (DrawPixelButton(minusButton, "-", false, 4)) pendingVolume = Mathf.Max(0f, pendingVolume - 0.1f);
+        if (DrawPixelButton(plusButton, "+", false, 4)) pendingVolume = Mathf.Min(1f, pendingVolume + 0.1f);
+        AudioListener.volume = pendingVolume;
+
+        for (int i = 0; i < 10; i++)
+        {
+            Rect block = new Rect(panelX + panelWidth / 2 - 130 + i * 27, panelY + 384, 19, 23);
+            DrawPixelRect(block, i < Mathf.RoundToInt(pendingVolume * 10f)
+                ? new Color(0.48f, 0.9f, 0.58f)
+                : new Color(0.11f, 0.2f, 0.27f));
+            DrawPixelBorder(block, 2, new Color(0.3f, 0.64f, 0.45f));
+        }
+
+        Rect backButton = new Rect(panelX + 70, panelY + panelHeight - 72, 230, 48);
+        Rect applyButton = new Rect(panelX + panelWidth - 300, panelY + panelHeight - 72, 230, 48);
+        if (DrawPixelButton(backButton, "VOLVER", false, 3))
+        {
+            CancelSettings();
+        }
+
+        if (DrawPixelButton(applyButton, "APLICAR", true, 3))
+        {
+            activeSkinIndex = pendingSkinIndex;
+            ApplySkinColor(activeSkinIndex);
+            PlayerPrefs.SetInt("SnakeSkin", activeSkinIndex);
+            PlayerPrefs.SetFloat("SnakeVolume", pendingVolume);
+            PlayerPrefs.Save();
+            settingsOpen = false;
+        }
+    }
+
+    private void CancelSettings()
+    {
+        pendingSkinIndex = activeSkinIndex;
+        pendingVolume = Mathf.Clamp01(PlayerPrefs.GetFloat("SnakeVolume", 1f));
+        AudioListener.volume = pendingVolume;
+        ApplySkinColor(activeSkinIndex);
+        settingsOpen = false;
+    }
+
+    private static void DrawWormPreview(Rect card, Color color)
+    {
+        float size = Mathf.Min(30f, (card.width - 22f) / 3f);
+        float startX = card.x + (card.width - size * 3f + 4f) / 2f;
+        float y = card.y + (card.height - size) / 2f;
+        Color border = color * 0.55f;
+        border.a = 1f;
+        for (int i = 0; i < 3; i++)
+        {
+            Rect segment = new Rect(startX + i * (size - 2f), y, size, size);
+            DrawPixelRect(segment, color);
+            DrawPixelBorder(segment, 2, border);
+        }
+
+        float headX = startX + 2f * (size - 2f);
+        DrawPixelRect(new Rect(headX + size * 0.62f, y + size * 0.24f, 3, 5), Color.white);
+        DrawPixelRect(new Rect(headX + size * 0.62f, y + size * 0.56f, 3, 5), Color.white);
+    }
+
+    private static bool DrawPixelButton(Rect rect, string label, bool primary, int pixelSize)
+    {
+        bool hovered = rect.Contains(Event.current.mousePosition);
+        Color background = primary
+            ? (hovered ? new Color(1f, 0.95f, 0.52f) : new Color(1f, 0.84f, 0.25f))
+            : (hovered ? new Color(0.18f, 0.31f, 0.4f) : new Color(0.09f, 0.17f, 0.25f));
+        Color foreground = primary ? new Color(0.03f, 0.08f, 0.12f) : Color.white;
+        DrawPixelRect(new Rect(rect.x + 5, rect.y + 5, rect.width, rect.height), new Color(0f, 0f, 0f, 0.48f));
+        DrawPixelRect(rect, background);
+        DrawPixelBorder(rect, 3, primary ? new Color(1f, 0.92f, 0.4f) : new Color(0.4f, 0.78f, 0.58f));
+        DrawCenteredPixelTextInRect(label, rect, pixelSize, foreground);
+        return IsLeftClick(rect);
+    }
+
+    private static bool IsLeftClick(Rect rect)
+    {
+        if (Event.current.type != EventType.MouseDown || Event.current.button != 0 || !rect.Contains(Event.current.mousePosition))
+        {
+            return false;
+        }
+
+        Event.current.Use();
+        return true;
+    }
+
+    private static void DrawCenteredPixelTextInRect(string message, Rect rect, int pixelSize, Color color)
+    {
+        int width = (message.Length * 6 - 1) * pixelSize;
+        int height = 7 * pixelSize;
+        DrawPixelText(message, Mathf.RoundToInt(rect.center.x - width / 2f), Mathf.RoundToInt(rect.center.y - height / 2f), pixelSize, color);
     }
 
     private static void DrawMenuOverlay(string title, string action, string footer)

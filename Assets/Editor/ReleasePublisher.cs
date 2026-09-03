@@ -204,7 +204,7 @@ public class ReleasePublisher : EditorWindow
                 null
             );
 
-            installerPath = CreateMacInstaller(projectRoot, buildFolder, normalizedVersion);
+            installerPath = CreateMacInstaller(projectRoot, executablePath, normalizedVersion);
         }
         else
         {
@@ -219,7 +219,7 @@ public class ReleasePublisher : EditorWindow
         return archivePath;
     }
 
-    private static string CreateMacInstaller(string projectRoot, string buildFolder, string normalizedVersion)
+    private static string CreateMacInstaller(string projectRoot, string gameAppPath, string normalizedVersion)
     {
         string createDmg = File.Exists("/opt/homebrew/bin/create-dmg")
             ? "/opt/homebrew/bin/create-dmg"
@@ -234,21 +234,37 @@ public class ReleasePublisher : EditorWindow
         string dmgPath = Path.Combine(projectRoot, "Builds", "Snake-" + normalizedVersion + "-Installer.dmg");
         if (File.Exists(dmgPath)) File.Delete(dmgPath);
 
-        string arguments = "--volname \"Snake Game\""
-            + " --background \"" + background + "\""
-            + " --window-pos 200 120"
-            + " --window-size 660 400"
-            + " --icon-size 128"
-            + " --icon \"Snake.app\" 170 190"
-            + " --hide-extension \"Snake.app\""
-            + " --app-drop-link 490 190"
-            + " --no-internet-enable"
-            + " \"" + dmgPath + "\""
-            + " \"" + buildFolder + "\"";
+        // Unity deja junto a la app una carpeta *BackUpThisFolder_ButDontShipIt*.
+        // El DMG se arma desde un staging aislado para distribuir solo Snake.app.
+        string stagingFolder = Path.Combine(projectRoot, "Builds", ".Snake-DmgSource-" + normalizedVersion);
+        if (Directory.Exists(stagingFolder)) Directory.Delete(stagingFolder, true);
+        Directory.CreateDirectory(stagingFolder);
 
-        RunProcess(createDmg, arguments, projectRoot, null);
-        if (!File.Exists(dmgPath) || new FileInfo(dmgPath).Length == 0)
-            throw new InvalidOperationException("create-dmg no generó el instalador.");
+        try
+        {
+            string stagedApp = Path.Combine(stagingFolder, "Snake.app");
+            RunProcess("/usr/bin/ditto", "\"" + gameAppPath + "\" \"" + stagedApp + "\"", projectRoot, null);
+
+            string arguments = "--volname \"Snake Game\""
+                + " --background \"" + background + "\""
+                + " --window-pos 200 120"
+                + " --window-size 660 400"
+                + " --icon-size 128"
+                + " --icon \"Snake.app\" 170 190"
+                + " --hide-extension \"Snake.app\""
+                + " --app-drop-link 490 190"
+                + " --no-internet-enable"
+                + " \"" + dmgPath + "\""
+                + " \"" + stagingFolder + "\"";
+
+            RunProcess(createDmg, arguments, projectRoot, null);
+            if (!File.Exists(dmgPath) || new FileInfo(dmgPath).Length == 0)
+                throw new InvalidOperationException("create-dmg no generó el instalador.");
+        }
+        finally
+        {
+            if (Directory.Exists(stagingFolder)) Directory.Delete(stagingFolder, true);
+        }
 
         return dmgPath;
     }

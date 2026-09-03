@@ -1,8 +1,8 @@
 {
-  "latestVersion": "1.0.14",
-  "minimumVersion": "1.0.0",
-  "downloadUrl": "https://github.com/VisionGameStudios/SnakeGame/releases/download/v1.0.14/Snake-1.0.14-StandaloneOSX.zip",
-  "sha256": "e418e27e20c4794c77a3e6e2e3fea7705cca0cb454b51187941030d9a95e84c6",
-  "size": 34955315,
-  "message": "Nueva versión de Snake."
+  "latestVersion": "1.0.15",
+  "minimumVersion": "1.0.15",
+  "downloadUrl": "https://github.com/VisionGameStudios/SnakeGame/releases/download/v1.0.15/Snake-1.0.15-StandaloneOSX.zip",
+  "sha256": "069e043bbc0e1f3434b6ff0bfd4d5d7b6a6128555a6aa0ec554743963bf38f33",
+  "size": 34959210,
+  "message": "Nueva versión de Snake. NUEVAS SKINS"
 }
