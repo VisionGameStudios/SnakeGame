@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class Snake : MonoBehaviour
 {
@@ -160,14 +161,20 @@ public class Snake : MonoBehaviour
 
     private void HandleInput()
     {
-        if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.UpArrow))
+        if (WasPressed(Key.W, KeyCode.W) || WasPressed(Key.UpArrow, KeyCode.UpArrow))
             QueueDirection(Vector2Int.up);
-        if (Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.DownArrow))
+        if (WasPressed(Key.S, KeyCode.S) || WasPressed(Key.DownArrow, KeyCode.DownArrow))
             QueueDirection(Vector2Int.down);
-        if (Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.LeftArrow))
+        if (WasPressed(Key.A, KeyCode.A) || WasPressed(Key.LeftArrow, KeyCode.LeftArrow))
             QueueDirection(Vector2Int.left);
-        if (Input.GetKeyDown(KeyCode.D) || Input.GetKeyDown(KeyCode.RightArrow))
+        if (WasPressed(Key.D, KeyCode.D) || WasPressed(Key.RightArrow, KeyCode.RightArrow))
             QueueDirection(Vector2Int.right);
+    }
+
+    private static bool WasPressed(Key key, KeyCode fallback)
+    {
+        return (Keyboard.current != null && Keyboard.current[key].wasPressedThisFrame)
+            || Input.GetKeyDown(fallback);
     }
 
     private void QueueDirection(Vector2Int newDirection)
