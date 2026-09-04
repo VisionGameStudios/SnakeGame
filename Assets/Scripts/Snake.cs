@@ -18,6 +18,7 @@ public class Snake : MonoBehaviour
     private static Sprite bodySprite;
     private static Sprite headSprite;
     private static Sprite deadHeadSprite;
+    private static Sprite[] deadHeadFrames;
     private static Sprite appleUiSprite;
     private static Material skinMaterial;
     private static int activeSkinIndex;
@@ -42,6 +43,7 @@ public class Snake : MonoBehaviour
     private AudioClip moveSound;
     private AudioClip loseSound;
     private AudioClip recordSound;
+    private Coroutine deadHeadAnimation;
 
     private static readonly Dictionary<char, string[]> PixelGlyphs = new Dictionary<char, string[]>
     {
@@ -85,6 +87,11 @@ public class Snake : MonoBehaviour
 
     private void Start()
     {
+        // El juego es ligero y depende de entradas rápidas. Evita que macOS deje
+        // el render a una frecuencia baja, lo que se siente como teclas tardías.
+        QualitySettings.vSyncCount = 0;
+        Application.targetFrameRate = 120;
+
         bestScore = PlayerPrefs.GetInt("SnakeBestScore", 0);
         activeSkinIndex = Mathf.Clamp(PlayerPrefs.GetInt("SnakeSkin", 0), 0, SkinColors.Length - 1);
         pendingSkinIndex = activeSkinIndex;
@@ -126,8 +133,16 @@ public class Snake : MonoBehaviour
             {
                 gameStarted = true;
             }
+            else
+            {
+                HandleInput();
+                gameStarted = pendingDirections.Count > 0;
+            }
 
-            return;
+            if (!gameStarted)
+            {
+                return;
+            }
         }
 
         if (gameOver)
@@ -213,9 +228,9 @@ public class Snake : MonoBehaviour
         {
             transform.rotation = RotationForHeadDirection(newDirection);
 
-            // Mantiene el movimiento sobre la cuadrícula, pero limita la espera
-            // de una entrada nueva a una fracción muy corta del ciclo.
-            timer = Mathf.Max(timer, Mathf.Max(0f, moveTime - 0.02f));
+            // Ejecuta el próximo paso en este mismo Update. La serpiente sigue
+            // avanzando por celdas enteras, pero el control no espera otro tick.
+            timer = moveTime;
         }
     }
 
@@ -417,7 +432,7 @@ public class Snake : MonoBehaviour
         }
 
         gameOver = true;
-        SetDeadHeadSprite();
+        StartDeadHeadAnimation();
         PlaySound(loseSound, 0.7f);
         StartCoroutine(ShakeCamera());
     }
@@ -551,8 +566,81 @@ public class Snake : MonoBehaviour
         }
     }
 
+    private void StartDeadHeadAnimation()
+    {
+        if (deadHeadAnimation != null)
+        {
+            StopCoroutine(deadHeadAnimation);
+        }
+
+        deadHeadAnimation = StartCoroutine(AnimateDeadHead());
+    }
+
+    private IEnumerator AnimateDeadHead()
+    {
+        if (deadHeadFrames == null || deadHeadFrames.Length == 0)
+        {
+            deadHeadFrames = Resources.LoadAll<Sprite>("Dead-snake-spritesheet-4x4-256");
+            System.Array.Sort(deadHeadFrames, (left, right) =>
+                GetSpriteFrameIndex(left.name).CompareTo(GetSpriteFrameIndex(right.name)));
+        }
+
+        SpriteRenderer renderer = GetComponent<SpriteRenderer>();
+        if (renderer == null || deadHeadFrames.Length == 0)
+        {
+            SetDeadHeadSprite();
+            deadHeadAnimation = null;
+            yield break;
+        }
+
+        transform.rotation = RotationForDeadHeadDirection(direction);
+        for (int i = 0; i < deadHeadFrames.Length; i++)
+        {
+            if (!gameOver)
+            {
+                break;
+            }
+
+            renderer.sprite = deadHeadFrames[i];
+            yield return new WaitForSecondsRealtime(0.065f);
+        }
+
+        deadHeadAnimation = null;
+    }
+
+    private static int GetSpriteFrameIndex(string spriteName)
+    {
+        int separator = spriteName.LastIndexOf('_');
+        int frameIndex;
+        return separator >= 0 && int.TryParse(spriteName.Substring(separator + 1), out frameIndex)
+            ? frameIndex
+            : int.MaxValue;
+    }
+
+    private static Quaternion RotationForDeadHeadDirection(Vector2Int lookDirection)
+    {
+        // El spritesheet está dibujado mirando hacia arriba.
+        float angle;
+        if (lookDirection == Vector2Int.right)
+            angle = -90f;
+        else if (lookDirection == Vector2Int.down)
+            angle = 180f;
+        else if (lookDirection == Vector2Int.left)
+            angle = 90f;
+        else
+            angle = 0f;
+
+        return Quaternion.Euler(0f, 0f, angle);
+    }
+
     private void RestoreHeadSprite()
     {
+        if (deadHeadAnimation != null)
+        {
+            StopCoroutine(deadHeadAnimation);
+            deadHeadAnimation = null;
+        }
+
         if (headSprite == null)
         {
             headSprite = Resources.Load<Sprite>("SnakeHead");
