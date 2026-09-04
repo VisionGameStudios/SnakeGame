@@ -48,6 +48,8 @@ public class Snake : MonoBehaviour
     private string achievementToast = "";
     private float achievementToastUntil;
     private bool gamepadStickLatched;
+    private bool menuStickLatched;
+    private int pauseSelection;
     private AudioSource audioSource;
     private AudioClip eatSound;
     private AudioClip moveSound;
@@ -177,6 +179,7 @@ public class Snake : MonoBehaviour
         if (Input.GetKeyDown(KeyCode.P) || Input.GetKeyDown(KeyCode.Escape))
         {
             paused = !paused;
+            if (paused) pauseSelection = 0;
         }
 
         if (paused)
@@ -258,14 +261,21 @@ public class Snake : MonoBehaviour
 
         if (paused)
         {
-            if (pad.buttonSouth.wasPressedThisFrame || pad.startButton.wasPressedThisFrame) paused=false;
-            else if (pad.buttonEast.wasPressedThisFrame) ReturnToMainMenu();
+            UpdatePauseSelection(pad);
+            if (pad.buttonSouth.wasPressedThisFrame)
+            {
+                if (pauseSelection==0) paused=false;
+                else ReturnToMainMenu();
+            }
+            else if (pad.buttonEast.wasPressedThisFrame || pad.startButton.wasPressedThisFrame) paused=false;
             return;
         }
 
         if (pad.startButton.wasPressedThisFrame)
         {
             paused=true;
+            pauseSelection=0;
+            menuStickLatched=false;
             return;
         }
 
@@ -286,6 +296,22 @@ public class Snake : MonoBehaviour
         }
 
         if (requested!=Vector2Int.zero) QueueDirection(requested);
+    }
+
+    private void UpdatePauseSelection(Gamepad pad)
+    {
+        int change=0;
+        if(pad.dpad.left.wasPressedThisFrame||pad.dpad.up.wasPressedThisFrame) change=-1;
+        else if(pad.dpad.right.wasPressedThisFrame||pad.dpad.down.wasPressedThisFrame) change=1;
+
+        Vector2 stick=pad.leftStick.ReadValue();
+        if(stick.magnitude<.45f) menuStickLatched=false;
+        else if(!menuStickLatched&&change==0)
+        {
+            change=(Mathf.Abs(stick.x)>Mathf.Abs(stick.y)?stick.x:-stick.y)>0?1:-1;
+            menuStickLatched=true;
+        }
+        if(change!=0) pauseSelection=(pauseSelection+change+2)%2;
     }
 
     private void ChangeMode(int delta)
@@ -1501,7 +1527,12 @@ public class Snake : MonoBehaviour
             ReturnToMainMenu();
         }
 
-        DrawCenteredPixelText("P ESC O START PARA SEGUIR", panelY + 286, 2, new Color(0.62f, 0.76f, 0.84f), 0);
+        if(Gamepad.current!=null)
+        {
+            DrawControllerFocus(pauseSelection==0?continueButton:homeButton);
+        }
+
+        DrawCenteredPixelText(Gamepad.current!=null?"D PAD ELEGIR  A ACEPTAR":"P ESC PARA SEGUIR", panelY + 286, 2, new Color(0.62f, 0.76f, 0.84f), 0);
     }
 
     private void DrawMobilePauseOverlay()
@@ -1516,6 +1547,18 @@ public class Snake : MonoBehaviour
         Rect home=new Rect(panel.x+26,panel.y+230,panel.width-52,56);
         if(DrawPixelButton(resume,"CONTINUAR",true,3)) paused=false;
         if(DrawPixelButton(home,"INICIO",false,3)) ReturnToMainMenu();
+        if(Gamepad.current!=null) DrawControllerFocus(pauseSelection==0?resume:home);
+    }
+
+    private static void DrawControllerFocus(Rect rect)
+    {
+        Color glow=new Color(1f,.9f,.22f);
+        DrawPixelBorder(new Rect(rect.x-7,rect.y-7,rect.width+14,rect.height+14),4,glow);
+        const float corner=10f;
+        DrawPixelRect(new Rect(rect.x-10,rect.y-10,corner,corner),glow);
+        DrawPixelRect(new Rect(rect.xMax,rect.y-10,corner,corner),glow);
+        DrawPixelRect(new Rect(rect.x-10,rect.yMax,corner,corner),glow);
+        DrawPixelRect(new Rect(rect.xMax,rect.yMax,corner,corner),glow);
     }
 
     private static void DrawAppleIcon(Rect destination)
