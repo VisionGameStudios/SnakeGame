@@ -6,6 +6,7 @@ using UnityEngine.InputSystem;
 public class Snake : MonoBehaviour
 {
     private enum GameMode { Classic, TimeAttack, NoWalls }
+    private enum ControlScheme { Keyboard, Gamepad, Touch }
     public Transform segmentPrefab;
 
     public Vector2Int direction = Vector2Int.right;
@@ -53,6 +54,8 @@ public class Snake : MonoBehaviour
     private int mainSelection;
     private int settingsSelection;
     private bool usingGamepad;
+    private bool tutorialOpen;
+    private ControlScheme tutorialScheme;
     private AudioSource audioSource;
     private AudioClip eatSound;
     private AudioClip moveSound;
@@ -142,9 +145,21 @@ public class Snake : MonoBehaviour
     {
         if (Keyboard.current != null && Keyboard.current.anyKey.wasPressedThisFrame) usingGamepad=false;
         HandleGamepadInput();
+        if(tutorialOpen)
+        {
+            if((Keyboard.current!=null&&(Keyboard.current.enterKey.wasPressedThisFrame||Keyboard.current.spaceKey.wasPressedThisFrame))||
+                Input.GetKeyDown(KeyCode.Return)||Input.GetKeyDown(KeyCode.Space)) CompleteTutorial();
+            return;
+        }
 
         if (!gameStarted)
         {
+            if(tutorialOpen)
+            {
+                DrawControlsTutorial();
+                DrawVersionBadge();
+                return;
+            }
             if (settingsOpen)
             {
                 if (Input.GetKeyDown(KeyCode.Escape))
@@ -156,12 +171,12 @@ public class Snake : MonoBehaviour
 
             if (Input.GetKeyDown(KeyCode.Space) || Input.GetKeyDown(KeyCode.Return))
             {
-                gameStarted = true;
+                RequestStart(ControlScheme.Keyboard);
             }
             else
             {
                 HandleInput();
-                gameStarted = pendingDirections.Count > 0;
+                if(pendingDirections.Count>0) RequestStart(ControlScheme.Keyboard);
             }
 
             if (!gameStarted)
@@ -242,6 +257,11 @@ public class Snake : MonoBehaviour
             pad.dpad.left.wasPressedThisFrame||pad.dpad.right.wasPressedThisFrame||
             pad.leftStick.ReadValue().magnitude>.55f;
         if(padActivity) usingGamepad=true;
+        if(tutorialOpen)
+        {
+            if(pad.buttonSouth.wasPressedThisFrame) CompleteTutorial();
+            return;
+        }
 
         if (!gameStarted)
         {
@@ -368,7 +388,7 @@ public class Snake : MonoBehaviour
 
     private void ActivateMainSelection()
     {
-        if(mainSelection==0){gameStarted=true;return;}
+        if(mainSelection==0){RequestStart(ControlScheme.Gamepad);return;}
         if(mainSelection==1)
         {
             pendingSkinIndex=activeSkinIndex;pendingVolume=AudioListener.volume;
@@ -376,6 +396,26 @@ public class Snake : MonoBehaviour
         }
         selectedMode=(GameMode)(mainSelection-2);
         PlayerPrefs.SetInt("SnakeMode",(int)selectedMode);PlayerPrefs.Save();ApplyModeRules();
+    }
+
+    private void RequestStart(ControlScheme scheme)
+    {
+        string key="SnakeControlsTutorial_"+scheme;
+        if(PlayerPrefs.GetInt(key,0)==0)
+        {
+            tutorialScheme=scheme;
+            tutorialOpen=true;
+            return;
+        }
+        gameStarted=true;
+    }
+
+    private void CompleteTutorial()
+    {
+        PlayerPrefs.SetInt("SnakeControlsTutorial_"+tutorialScheme,1);
+        PlayerPrefs.Save();
+        tutorialOpen=false;
+        gameStarted=true;
     }
 
     private void UpdateSettingsSelection(Gamepad pad)
@@ -1076,7 +1116,7 @@ public class Snake : MonoBehaviour
 
             if (DrawStartOverlay())
             {
-                gameStarted = true;
+                RequestStart(Application.isMobilePlatform?ControlScheme.Touch:ControlScheme.Keyboard);
             }
             DrawVersionBadge();
             return;
@@ -1166,6 +1206,58 @@ public class Snake : MonoBehaviour
         string restartPrompt=usingGamepad?"A PARA REINICIAR":UseMobileLayout()?"TOCA PARA REINICIAR":"R O ESPACIO PARA REINICIAR";
         DrawCenteredPixelText(restartPrompt, panelY + 239, UseMobileLayout()?2:3, new Color(1f, 0.9f, 0.3f), 0);
         DrawVersionBadge();
+    }
+
+    private void DrawControlsTutorial()
+    {
+        DrawPixelRect(new Rect(0,0,Screen.width,Screen.height),new Color(.01f,.03f,.06f,.86f));
+        int panelWidth=Mathf.Min(760,Screen.width-28);
+        int panelHeight=Mathf.Min(510,Screen.height-28);
+        int panelX=(Screen.width-panelWidth)/2;
+        int panelY=(Screen.height-panelHeight)/2;
+        Rect panel=new Rect(panelX,panelY,panelWidth,panelHeight);
+        DrawPixelRect(new Rect(panel.x+9,panel.y+9,panel.width,panel.height),new Color(0,0,0,.55f));
+        DrawPixelRect(panel,new Color(.04f,.09f,.15f,.99f));
+        DrawPixelBorder(panel,7,new Color(.24f,.9f,.46f));
+        DrawPixelBorder(new Rect(panel.x+14,panel.y+14,panel.width-28,panel.height-28),2,new Color(.32f,.5f,.58f));
+        DrawCenteredPixelText("CONTROLES",panelY+38,UseMobileLayout()?5:7,new Color(1f,.9f,.25f),0);
+        string schemeTitle=tutorialScheme==ControlScheme.Gamepad?"CONTROL":tutorialScheme==ControlScheme.Touch?"PANTALLA TACTIL":"TECLADO";
+        DrawCenteredPixelText(schemeTitle,panelY+102,3,new Color(.68f,.94f,.77f),0);
+
+        Rect guide=new Rect(panelX+45,panelY+142,panelWidth-90,190);
+        if(tutorialScheme==ControlScheme.Touch) DrawTouchTutorialGuide(guide);
+        else DrawControlsGuide(guide,tutorialScheme==ControlScheme.Gamepad);
+
+        DrawCenteredPixelText("ESTA GUIA SOLO APARECE UNA VEZ",panelY+354,2,new Color(.62f,.76f,.84f),0);
+        Rect understood=new Rect(panelX+panelWidth/2-145,panelY+400,290,62);
+        string label=tutorialScheme==ControlScheme.Gamepad?"A  ENTENDIDO":"ENTENDIDO";
+        if(DrawPixelButton(understood,label,true,3)) CompleteTutorial();
+        if(tutorialScheme==ControlScheme.Gamepad&&usingGamepad) DrawControllerFocus(understood);
+    }
+
+    private static void DrawTouchTutorialGuide(Rect area)
+    {
+        DrawPixelRect(area,new Color(.055f,.11f,.17f,.96f));
+        DrawPixelBorder(area,3,new Color(.35f,.72f,.55f));
+        float size=44f,gap=4f;
+        bool compact=area.width<500;
+        float x=compact?area.center.x-(size*1.5f+gap):area.x+28;
+        float y=area.y+(compact?12:38);
+        DrawPadButton(new Rect(x+size+gap,y,size,size),Vector2Int.up);
+        DrawPadButton(new Rect(x,y+size+gap,size,size),Vector2Int.left);
+        DrawPadButton(new Rect(x+size+gap,y+size+gap,size,size),Vector2Int.down);
+        DrawPadButton(new Rect(x+(size+gap)*2,y+size+gap,size,size),Vector2Int.right);
+        if(compact)
+        {
+            DrawCenteredPixelTextInRect("TOCA EL PAD",new Rect(area.x,area.y+116,area.width,20),2,Color.white);
+            DrawCenteredPixelTextInRect("PARA MOVER",new Rect(area.x,area.y+143,area.width,20),2,new Color(.68f,.94f,.77f));
+        }
+        else
+        {
+            DrawPixelText("TOCA EL PAD",Mathf.RoundToInt(area.x+190),Mathf.RoundToInt(area.y+48),2,Color.white);
+            DrawPixelText("PARA MOVER",Mathf.RoundToInt(area.x+190),Mathf.RoundToInt(area.y+80),2,new Color(.68f,.94f,.77f));
+            DrawPixelText("PAUSA ARRIBA",Mathf.RoundToInt(area.x+190),Mathf.RoundToInt(area.y+125),2,new Color(1f,.88f,.35f));
+        }
     }
 
     private bool DrawStartOverlay()
@@ -1506,9 +1598,9 @@ public class Snake : MonoBehaviour
         DrawPixelRect(new Rect(headX + size * 0.62f, y + size * 0.56f, 3, 5), Color.white);
     }
 
-    private void DrawControlsGuide(Rect area)
+    private void DrawControlsGuide(Rect area,bool? controllerOverride=null)
     {
-        bool controllerConnected=usingGamepad&&Gamepad.current!=null;
+        bool controllerConnected=controllerOverride??(usingGamepad&&Gamepad.current!=null);
         DrawPixelRect(new Rect(area.x+4,area.y+4,area.width,area.height),new Color(0,0,0,.35f));
         DrawPixelRect(area,new Color(.055f,.11f,.17f,.96f));
         DrawPixelBorder(area,3,controllerConnected?new Color(1f,.82f,.18f):new Color(.35f,.72f,.55f));
