@@ -12,6 +12,8 @@ public static class GameBoard
     public static float BottomBoundary { get; private set; }
     public static float TopBoundary { get; private set; }
     public static bool IsReady { get; private set; }
+    public static int CellCount => !IsReady ? 0 :
+        Mathf.RoundToInt(RightBoundary - LeftBoundary) * Mathf.RoundToInt(TopBoundary - BottomBoundary);
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void CreateBoard()
@@ -83,6 +85,16 @@ public static class GameBoard
             || centerPosition.x + halfSegment > RightBoundary
             || centerPosition.y - halfSegment < BottomBoundary
             || centerPosition.y + halfSegment > TopBoundary;
+    }
+
+    public static Vector3 WrapPosition(Vector3 centerPosition)
+    {
+        if (!IsReady) return centerPosition;
+        if (centerPosition.x - 0.5f < LeftBoundary) centerPosition.x = RightBoundary - 0.5f;
+        else if (centerPosition.x + 0.5f > RightBoundary) centerPosition.x = LeftBoundary + 0.5f;
+        if (centerPosition.y - 0.5f < BottomBoundary) centerPosition.y = TopBoundary - 0.5f;
+        else if (centerPosition.y + 0.5f > TopBoundary) centerPosition.y = BottomBoundary + 0.5f;
+        return centerPosition;
     }
 
     private static void CreateWall(Transform parent, string name, Vector2 start, Vector2 end)

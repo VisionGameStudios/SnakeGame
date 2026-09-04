@@ -1,151 +1,144 @@
+using System.Collections.Generic;
 using UnityEngine;
 
 public class Food : MonoBehaviour
 {
-    private const float DoubleSpawnChance = 0.28f;
-    private const int DoubleSpawnThreshold = 15;
-    private static Food bonusFood;
+    const float DoubleChance=.28f, GoldenChance=.025f, GoldenLife=5f;
+    const int DoubleThreshold=15, RingSegments=32;
+    static Food bonusFood, goldenFood;
+    public int minX=-4,maxX=4,minY=-4,maxY=4;
+    bool isBonus,isGolden;
+    float goldenExpiresAt;
+    SpriteRenderer spriteRenderer;
+    LineRenderer countdownRing;
+    public int PointValue => isGolden ? 3 : 1;
+    public bool IsGolden => isGolden;
 
-    public int minX = -4;
-    public int maxX = 4;
-
-    public int minY = -4;
-    public int maxY = 4;
-
-    private bool isBonus;
-
-    private void Awake()
+    void Awake()
     {
-        gameObject.tag = "Food";
-
-        SpriteRenderer renderer = GetComponent<SpriteRenderer>();
-        if (renderer == null)
-        {
-            renderer = gameObject.AddComponent<SpriteRenderer>();
-        }
-
-        if (renderer.sprite == null)
-        {
-            renderer.sprite = Resources.Load<Sprite>("Apple");
-        }
-
-        CircleCollider2D collider = GetComponent<CircleCollider2D>();
-        if (collider == null)
-        {
-            collider = gameObject.AddComponent<CircleCollider2D>();
-        }
-
-        collider.isTrigger = true;
-        collider.radius = 0.42f;
+        gameObject.tag="Food";
+        spriteRenderer=GetComponent<SpriteRenderer>() ?? gameObject.AddComponent<SpriteRenderer>();
+        if(spriteRenderer.sprite==null) spriteRenderer.sprite=Resources.Load<Sprite>("Apple");
+        CircleCollider2D collider=GetComponent<CircleCollider2D>() ?? gameObject.AddComponent<CircleCollider2D>();
+        collider.isTrigger=true; collider.radius=.42f;
     }
 
-    private void Start()
+    void Start(){ RandomizePosition(); }
+
+    void Update()
     {
-        RandomizePosition();
+        if(!isGolden) return;
+        float remaining=goldenExpiresAt-Time.unscaledTime;
+        UpdateRing(Mathf.Clamp01(remaining/GoldenLife));
+        if(remaining<=0f) Destroy(gameObject);
     }
 
-    public void RandomizePosition()
+    public bool RandomizePosition()
     {
-        Snake snake = Object.FindFirstObjectByType<Snake>();
-        Food[] foods = Object.FindObjectsByType<Food>(FindObjectsSortMode.None);
-
-        for (int attempt = 0; attempt < 100; attempt++)
+        Snake snake=Object.FindFirstObjectByType<Snake>();
+        Food[] foods=Object.FindObjectsByType<Food>(FindObjectsSortMode.None);
+        List<Vector2> available=new List<Vector2>();
+        List<Vector2> visibleAvailable=new List<Vector2>();
+        for(int x=minX;x<=maxX;x++) for(int y=minY;y<=maxY;y++)
         {
-            int x = Random.Range(minX, maxX + 1);
-            int y = Random.Range(minY, maxY + 1);
-            Vector2 candidate = new Vector2(x, y);
-
-            Camera mainCamera = Camera.main;
-            if (mainCamera != null)
+            Vector2 candidate=new Vector2(x,y);
+            if(IsAvailable(candidate,snake,foods))
             {
-                Vector3 screenPosition = mainCamera.WorldToScreenPoint(candidate);
-                bool hiddenByScore = screenPosition.x < 180f && screenPosition.y > Screen.height - 70f;
-                if (hiddenByScore)
-                {
-                    continue;
-                }
-            }
-
-            bool occupied = snake != null && snake.IsPositionReservedForSnake(candidate);
-            foreach (Food food in foods)
-            {
-                if (food != this && Vector2.SqrMagnitude((Vector2)food.transform.position - candidate) < 0.01f)
-                {
-                    occupied = true;
-                    break;
-                }
-            }
-
-            if (occupied)
-            {
-                continue;
-            }
-
-            Collider2D[] hits = Physics2D.OverlapPointAll(candidate);
-            foreach (Collider2D hit in hits)
-            {
-                if (hit.gameObject != gameObject && (hit.CompareTag("Snake") || hit.CompareTag("Food")))
-                {
-                    occupied = true;
-                    break;
-                }
-            }
-
-            if (!occupied)
-            {
-                transform.position = candidate;
-                return;
+                available.Add(candidate);
+                if(!IsBehindScore(candidate)) visibleAvailable.Add(candidate);
             }
         }
+        if(available.Count==0)
+        {
+            if(snake!=null) snake.HandleBoardCompleted();
+            return false;
+        }
+        List<Vector2> pool=visibleAvailable.Count>0 ? visibleAvailable : available;
+        transform.position=pool[Random.Range(0,pool.Count)];
+        return true;
     }
 
-    public void HandleEaten(int applesEaten)
+    bool IsBehindScore(Vector2 candidate)
     {
-        if (isBonus)
-        {
-            if (bonusFood == this)
-            {
-                bonusFood = null;
-            }
-
-            Destroy(gameObject);
-            return;
-        }
-
-        RandomizePosition();
-
-        if (applesEaten >= DoubleSpawnThreshold && bonusFood == null && Random.value < DoubleSpawnChance)
-        {
-            SpawnBonusFood();
-        }
+        Camera camera=Camera.main;
+        if(camera==null) return false;
+        Vector3 screen=camera.WorldToScreenPoint(candidate);
+        return screen.x<180f && screen.y>Screen.height-70f;
     }
 
-    private void SpawnBonusFood()
+    bool IsAvailable(Vector2 candidate,Snake snake,Food[] foods)
     {
-        GameObject bonusObject = new GameObject("Bonus Food");
-        Food bonus = bonusObject.AddComponent<Food>();
-        bonus.minX = minX;
-        bonus.maxX = maxX;
-        bonus.minY = minY;
-        bonus.maxY = maxY;
-        bonus.isBonus = true;
-        bonusFood = bonus;
+        if(snake!=null && snake.IsPositionReservedForSnake(candidate)) return false;
+        foreach(Food food in foods)
+            if(food!=this && Vector2.SqrMagnitude((Vector2)food.transform.position-candidate)<.01f) return false;
+        foreach(Collider2D hit in Physics2D.OverlapPointAll(candidate))
+            if(hit.gameObject!=gameObject && (hit.CompareTag("Snake")||hit.CompareTag("Food"))) return false;
+        return true;
+    }
+
+    public void HandleEaten(int score)
+    {
+        if(isGolden){ goldenFood=null; Destroy(gameObject); return; }
+        if(isBonus){ bonusFood=null; Destroy(gameObject); return; }
+        if(!RandomizePosition()) return;
+        if(score>=DoubleThreshold && bonusFood==null && Random.value<DoubleChance)
+        {
+            bonusFood=CreateFood("Bonus Food"); bonusFood.isBonus=true;
+        }
+        if(goldenFood==null && Random.value<GoldenChance) SpawnGolden();
+    }
+
+    Food CreateFood(string objectName)
+    {
+        Food food=new GameObject(objectName).AddComponent<Food>();
+        food.minX=minX; food.maxX=maxX; food.minY=minY; food.maxY=maxY;
+        return food;
+    }
+
+    void SpawnGolden()
+    {
+        goldenFood=CreateFood("Golden Apple");
+        goldenFood.isGolden=true;
+        goldenFood.spriteRenderer.sprite=Resources.Load<Sprite>("GoldenApple");
+        goldenFood.goldenExpiresAt=Time.unscaledTime+GoldenLife;
+        goldenFood.CreateRing();
+    }
+
+    void CreateRing()
+    {
+        GameObject ring=new GameObject("Golden Timer");
+        ring.transform.SetParent(transform,false);
+        ring.transform.localPosition=new Vector3(0f,.72f,-.1f);
+        countdownRing=ring.AddComponent<LineRenderer>();
+        countdownRing.useWorldSpace=false; countdownRing.loop=false;
+        countdownRing.startWidth=countdownRing.endWidth=.065f;
+        countdownRing.startColor=countdownRing.endColor=new Color(1f,.86f,.15f);
+        countdownRing.material=new Material(Shader.Find("Sprites/Default"));
+        countdownRing.sortingOrder=spriteRenderer.sortingOrder+2;
+        UpdateRing(1f);
+    }
+
+    void UpdateRing(float fraction)
+    {
+        if(countdownRing==null) return;
+        int visible=Mathf.Max(1,Mathf.CeilToInt(RingSegments*fraction));
+        countdownRing.positionCount=visible+1;
+        for(int i=0;i<=visible;i++)
+        {
+            float angle=Mathf.PI*.5f-i*Mathf.PI*2f/RingSegments;
+            countdownRing.SetPosition(i,new Vector3(Mathf.Cos(angle)*.23f,Mathf.Sin(angle)*.23f,0f));
+        }
     }
 
     public static void ResetBonusFood()
     {
-        if (bonusFood != null)
-        {
-            Destroy(bonusFood.gameObject);
-            bonusFood = null;
-        }
+        if(bonusFood!=null){ Destroy(bonusFood.gameObject); bonusFood=null; }
+        if(goldenFood!=null){ Destroy(goldenFood.gameObject); goldenFood=null; }
     }
 
-    private void OnDestroy()
+    void OnDestroy()
     {
-        if (bonusFood == this)
-        {
-            bonusFood = null;
-        }
+        if(bonusFood==this) bonusFood=null;
+        if(goldenFood==this) goldenFood=null;
     }
 }

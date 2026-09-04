@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: 9983e13c9f5344be3aad04138c8cfa43
+guid: a24d7b9e3c8f4e58b610d9a724c35f01
 TextureImporter:
   internalIDToNameTable:
   - first:
       213: 7293598183456022363
-    second: Apple_0
+    second: GoldenApple_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -141,7 +141,7 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: Apple_0
+      name: GoldenApple_0
       rect:
         serializedVersion: 2
         x: 0
@@ -176,7 +176,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      Apple_0: 7293598183456022363
+      GoldenApple_0: 7293598183456022363
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

@@ -5,6 +5,7 @@ using UnityEngine.InputSystem;
 
 public class Snake : MonoBehaviour
 {
+    private enum GameMode { Classic, TimeAttack, NoWalls }
     public Transform segmentPrefab;
 
     public Vector2Int direction = Vector2Int.right;
@@ -38,6 +39,13 @@ public class Snake : MonoBehaviour
     private float pendingVolume;
     private int score;
     private int bestScore;
+    private GameMode selectedMode;
+    private int level = 1;
+    private float initialMoveTime;
+    private float timeRemaining = 60f;
+    private bool boardCompleted;
+    private string achievementToast = "";
+    private float achievementToastUntil;
     private AudioSource audioSource;
     private AudioClip eatSound;
     private AudioClip moveSound;
@@ -73,6 +81,7 @@ public class Snake : MonoBehaviour
         { '+', new[] { "00000", "00100", "00100", "11111", "00100", "00100", "00000" } },
         { '-', new[] { "00000", "00000", "00000", "11111", "00000", "00000", "00000" } },
         { '.', new[] { "00000", "00000", "00000", "00000", "00000", "00110", "00110" } },
+        { '/', new[] { "00001", "00010", "00010", "00100", "01000", "01000", "10000" } },
         { '0', new[] { "01110", "10001", "10011", "10101", "11001", "10001", "01110" } },
         { '1', new[] { "00100", "01100", "00100", "00100", "00100", "00100", "01110" } },
         { '2', new[] { "01110", "10001", "00001", "00010", "00100", "01000", "11111" } },
@@ -93,6 +102,8 @@ public class Snake : MonoBehaviour
         Application.targetFrameRate = 120;
 
         bestScore = PlayerPrefs.GetInt("SnakeBestScore", 0);
+        selectedMode = (GameMode)Mathf.Clamp(PlayerPrefs.GetInt("SnakeMode", 0), 0, 2);
+        initialMoveTime = moveTime;
         activeSkinIndex = Mathf.Clamp(PlayerPrefs.GetInt("SnakeSkin", 0), 0, SkinColors.Length - 1);
         pendingSkinIndex = activeSkinIndex;
         pendingVolume = Mathf.Clamp01(PlayerPrefs.GetFloat("SnakeVolume", 1f));
@@ -163,6 +174,17 @@ public class Snake : MonoBehaviour
         if (paused)
         {
             return;
+        }
+
+        if (selectedMode == GameMode.TimeAttack)
+        {
+            timeRemaining -= Time.deltaTime;
+            if (timeRemaining <= 0f)
+            {
+                timeRemaining = 0f;
+                LoseGame();
+                return;
+            }
         }
 
         HandleInput();
@@ -250,7 +272,11 @@ public class Snake : MonoBehaviour
 
         Vector3 nextPosition = transform.position + new Vector3(direction.x, direction.y, 0f);
 
-        if (GameBoard.WouldCrossWall(nextPosition))
+        if (GameBoard.WouldCrossWall(nextPosition) && selectedMode == GameMode.NoWalls)
+        {
+            nextPosition = GameBoard.WrapPosition(nextPosition);
+        }
+        else if (GameBoard.WouldCrossWall(nextPosition))
         {
             LoseGame();
             return;
@@ -388,9 +414,15 @@ public class Snake : MonoBehaviour
     {
         if (other.CompareTag("Food"))
         {
-            PixelBurst.Create(other.transform.position, new Color(1f, 0.18f, 0.12f));
+            Food food = other.GetComponent<Food>();
+            int points = food != null ? food.PointValue : 1;
+            bool wasGolden = food != null && food.IsGolden;
+            PixelBurst.Create(other.transform.position, wasGolden ? new Color(1f, .82f, .1f) : new Color(1f, 0.18f, 0.12f));
             Grow();
-            score++;
+            score += points;
+            level = 1 + score / 10;
+            moveTime = Mathf.Max(0.07f, initialMoveTime - (level - 1) * 0.008f);
+            CheckAchievements(wasGolden);
 
             if (score > bestScore)
             {
@@ -404,16 +436,19 @@ public class Snake : MonoBehaviour
                 PlaySound(eatSound, 0.55f);
             }
 
-            Food food = other.GetComponent<Food>();
-
             if (food != null)
             {
                 food.HandleEaten(score);
             }
+
+            if (GameBoard.CellCount > 0 && segments.Count >= GameBoard.CellCount)
+            {
+                HandleBoardCompleted();
+            }
         }
         else if (other.CompareTag("Wall"))
         {
-            LoseGame();
+            if (selectedMode != GameMode.NoWalls) LoseGame();
         }
     }
 
@@ -450,8 +485,12 @@ public class Snake : MonoBehaviour
         pendingDirections.Clear();
         timer = 0f;
         gameOver = false;
+        boardCompleted = false;
         paused = false;
         score = 0;
+        level = 1;
+        moveTime = initialMoveTime;
+        timeRemaining = 60f;
         Food.ResetBonusFood();
         RestoreHeadSprite();
 
@@ -466,6 +505,41 @@ public class Snake : MonoBehaviour
 
         UpdateSpriteOrientations();
 
+    }
+
+    public void HandleBoardCompleted()
+    {
+        if (gameOver) return;
+        boardCompleted = true;
+        gameOver = true;
+        UnlockAchievement("board", "TABLERO");
+        PlaySound(recordSound, .8f);
+    }
+
+    private void CheckAchievements(bool golden)
+    {
+        if (score >= 1) UnlockAchievement("first", "PRIMERA");
+        if (score >= 15) UnlockAchievement("level2", "NIVEL DOS");
+        if (score >= 30) UnlockAchievement("thirty", "TREINTA");
+        if (golden) UnlockAchievement("golden", "DORADA");
+    }
+
+    private void UnlockAchievement(string id, string label)
+    {
+        string key = "SnakeAchievement_" + id;
+        if (PlayerPrefs.GetInt(key, 0) != 0) return;
+        PlayerPrefs.SetInt(key, 1);
+        PlayerPrefs.Save();
+        achievementToast = "LOGRO " + label;
+        achievementToastUntil = Time.unscaledTime + 3f;
+    }
+
+    private static int GetAchievementCount()
+    {
+        string[] ids = { "first", "level2", "thirty", "golden", "board" };
+        int count = 0;
+        foreach (string id in ids) count += PlayerPrefs.GetInt("SnakeAchievement_" + id, 0);
+        return count;
     }
 
     public bool IsPositionReservedForSnake(Vector2 candidate)
@@ -770,6 +844,21 @@ public class Snake : MonoBehaviour
         DrawPixelText(recordText, recordX + 2, recordY + 2, recordPixelSize, new Color(0.01f, 0.02f, 0.04f, 0.8f));
         DrawPixelText(recordText, recordX, recordY, recordPixelSize, new Color(1f, 0.9f, 0.3f));
 
+        string centerHud = selectedMode == GameMode.TimeAttack
+            ? "TIEMPO " + Mathf.CeilToInt(timeRemaining).ToString("D2")
+            : "NIVEL " + level.ToString("D2");
+        DrawCenteredPixelText(centerHud, 22, 3, new Color(.65f, .95f, .72f), 0);
+
+        if (Time.unscaledTime < achievementToastUntil)
+        {
+            int toastWidth = Mathf.Min(430, Screen.width - 40);
+            Rect toast = new Rect((Screen.width - toastWidth) / 2, 68, toastWidth, 54);
+            DrawPixelRect(new Rect(toast.x + 5, toast.y + 5, toast.width, toast.height), new Color(0,0,0,.5f));
+            DrawPixelRect(toast, new Color(.08f,.15f,.22f,.97f));
+            DrawPixelBorder(toast, 4, new Color(1f,.84f,.2f));
+            DrawCenteredPixelTextInRect(achievementToast, toast, 3, new Color(1f,.9f,.3f));
+        }
+
         if (paused)
         {
             DrawPauseOverlay();
@@ -798,8 +887,10 @@ public class Snake : MonoBehaviour
         DrawPixelRect(new Rect(panelX + 26, panelY + panelHeight - 44, 18, 18), new Color(1f, 0.9f, 0.3f));
         DrawPixelRect(new Rect(panelX + panelWidth - 44, panelY + panelHeight - 44, 18, 18), new Color(1f, 0.9f, 0.3f));
 
-        DrawCenteredPixelText("GAME OVER", panelY + 48, 9, new Color(0.01f, 0.02f, 0.04f), 5);
-        DrawCenteredPixelText("GAME OVER", panelY + 43, 9, new Color(1f, 0.9f, 0.3f), 0);
+        string endTitle = boardCompleted ? "TABLERO COMPLETO" : "GAME OVER";
+        int endScale = boardCompleted ? 5 : 9;
+        DrawCenteredPixelText(endTitle, panelY + 48, endScale, new Color(0.01f, 0.02f, 0.04f), 5);
+        DrawCenteredPixelText(endTitle, panelY + 43, endScale, new Color(1f, 0.9f, 0.3f), 0);
         DrawPixelRect(new Rect(panelX + 90, panelY + 120, panelWidth - 180, 4), new Color(0.1f, 0.7f, 0.25f));
         DrawCenteredPixelText("SCORE " + score.ToString("D3"), panelY + 145, 4, Color.white, 0);
         DrawCenteredPixelText("RECORD " + bestScore.ToString("D3"), panelY + 185, 3, new Color(0.65f, 0.95f, 0.72f), 0);
@@ -812,7 +903,7 @@ public class Snake : MonoBehaviour
         DrawPixelRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.01f, 0.03f, 0.06f, 0.76f));
 
         int panelWidth = Mathf.Min(760, Screen.width - 32);
-        int panelHeight = Mathf.Min(420, Screen.height - 32);
+        int panelHeight = Mathf.Min(520, Screen.height - 32);
         int panelX = (Screen.width - panelWidth) / 2;
         int panelY = (Screen.height - panelHeight) / 2;
         Rect panel = new Rect(panelX, panelY, panelWidth, panelHeight);
@@ -828,8 +919,8 @@ public class Snake : MonoBehaviour
         DrawCenteredPixelText("SNAKE", panelY + 44, titleScale, new Color(1f, 0.9f, 0.25f), 0);
         DrawCenteredPixelText("GAME", panelY + 145, 3, new Color(0.65f, 0.95f, 0.72f), 0);
 
-        Rect playButton = new Rect(panelX + panelWidth / 2 - 260, panelY + 195, 245, 62);
-        Rect settingsButton = new Rect(panelX + panelWidth / 2 + 15, panelY + 195, 245, 62);
+        Rect playButton = new Rect(panelX + panelWidth / 2 - 260, panelY + 185, 245, 62);
+        Rect settingsButton = new Rect(panelX + panelWidth / 2 + 15, panelY + 185, 245, 62);
         bool playClicked = DrawPixelButton(playButton, "JUGAR", true, 4);
         if (DrawPixelButton(settingsButton, "AJUSTES", false, 3))
         {
@@ -838,10 +929,24 @@ public class Snake : MonoBehaviour
             settingsOpen = true;
         }
 
-        DrawCenteredPixelText("ESPACIO O ENTER", panelY + 278, 2, Color.white, 0);
-        DrawPixelRect(new Rect(panelX + 70, panelY + 316, panelWidth - 140, 3), new Color(0.12f, 0.58f, 0.34f));
-        DrawCenteredPixelText("WASD O FLECHAS", panelY + 337, 2, new Color(0.65f, 0.8f, 0.88f), 0);
-        DrawCenteredPixelText("RECORD " + bestScore.ToString("D3"), panelY + 377, 3, new Color(1f, 0.9f, 0.3f), 0);
+        DrawCenteredPixelText("MODO", panelY + 275, 3, Color.white, 0);
+        float modeWidth = (panelWidth - 80f) / 3f;
+        string[] modeLabels = { "CLASICO", "CONTRA", "SIN MUROS" };
+        for (int i = 0; i < 3; i++)
+        {
+            Rect modeButton = new Rect(panelX + 30 + i * (modeWidth + 10), panelY + 310, modeWidth, 52);
+            if (DrawPixelButton(modeButton, modeLabels[i], (int)selectedMode == i, 2))
+            {
+                selectedMode = (GameMode)i;
+                PlayerPrefs.SetInt("SnakeMode", i);
+                PlayerPrefs.Save();
+            }
+        }
+        DrawCenteredPixelText("ESPACIO O ENTER", panelY + 385, 2, Color.white, 0);
+        DrawPixelRect(new Rect(panelX + 70, panelY + 418, panelWidth - 140, 3), new Color(0.12f, 0.58f, 0.34f));
+        DrawCenteredPixelText("WASD O FLECHAS", panelY + 435, 2, new Color(0.65f, 0.8f, 0.88f), 0);
+        DrawCenteredPixelText("RECORD " + bestScore.ToString("D3"), panelY + 458, 2, new Color(1f, 0.9f, 0.3f), 0);
+        DrawCenteredPixelText("LOGROS " + GetAchievementCount() + "/5", panelY + 488, 2, new Color(.65f, .95f, .72f), 0);
 
         return playClicked;
     }
