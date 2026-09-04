@@ -99,7 +99,10 @@ public class Snake : MonoBehaviour
         // El juego es ligero y depende de entradas rápidas. Evita que macOS deje
         // el render a una frecuencia baja, lo que se siente como teclas tardías.
         QualitySettings.vSyncCount = 0;
+        QualitySettings.maxQueuedFrames = 1;
         Application.targetFrameRate = 120;
+        Application.runInBackground = true;
+        InputSystem.settings.updateMode = InputSettings.UpdateMode.ProcessEventsInDynamicUpdate;
 
         bestScore = PlayerPrefs.GetInt("SnakeBestScore", 0);
         selectedMode = (GameMode)Mathf.Clamp(PlayerPrefs.GetInt("SnakeMode", 0), 0, 2);
@@ -124,6 +127,7 @@ public class Snake : MonoBehaviour
         }
 
         UpdateSpriteOrientations();
+        ApplyModeRules();
 
     }
 
@@ -188,6 +192,7 @@ public class Snake : MonoBehaviour
         }
 
         HandleInput();
+        HandleTouchPadInput();
         timer += Time.deltaTime;
 
         if (timer >= moveTime)
@@ -213,6 +218,23 @@ public class Snake : MonoBehaviour
     {
         return (Keyboard.current != null && Keyboard.current[key].wasPressedThisFrame)
             || Input.GetKeyDown(fallback);
+    }
+
+    private void HandleTouchPadInput()
+    {
+        if (!UseMobileLayout() || Touchscreen.current == null ||
+            !Touchscreen.current.primaryTouch.press.wasPressedThisFrame)
+        {
+            return;
+        }
+
+        Vector2 screenTouch = Touchscreen.current.primaryTouch.position.ReadValue();
+        Vector2 guiTouch = new Vector2(screenTouch.x, Screen.height - screenTouch.y);
+        GetTouchPadRects(out Rect up, out Rect down, out Rect left, out Rect right);
+        if (up.Contains(guiTouch)) QueueDirection(Vector2Int.up);
+        else if (down.Contains(guiTouch)) QueueDirection(Vector2Int.down);
+        else if (left.Contains(guiTouch)) QueueDirection(Vector2Int.left);
+        else if (right.Contains(guiTouch)) QueueDirection(Vector2Int.right);
     }
 
     private void QueueDirection(Vector2Int newDirection)
@@ -504,7 +526,13 @@ public class Snake : MonoBehaviour
         }
 
         UpdateSpriteOrientations();
+        ApplyModeRules();
 
+    }
+
+    private void ApplyModeRules()
+    {
+        GameBoard.SetWallsEnabled(selectedMode != GameMode.NoWalls);
     }
 
     public void HandleBoardCompleted()
@@ -847,7 +875,7 @@ public class Snake : MonoBehaviour
         string centerHud = selectedMode == GameMode.TimeAttack
             ? "TIEMPO " + Mathf.CeilToInt(timeRemaining).ToString("D2")
             : "NIVEL " + level.ToString("D2");
-        DrawCenteredPixelText(centerHud, 22, 3, new Color(.65f, .95f, .72f), 0);
+        DrawCenteredPixelText(centerHud, UseMobileLayout() ? 68 : 22, UseMobileLayout() ? 2 : 3, new Color(.65f, .95f, .72f), 0);
 
         if (Time.unscaledTime < achievementToastUntil)
         {
@@ -857,6 +885,11 @@ public class Snake : MonoBehaviour
             DrawPixelRect(toast, new Color(.08f,.15f,.22f,.97f));
             DrawPixelBorder(toast, 4, new Color(1f,.84f,.2f));
             DrawCenteredPixelTextInRect(achievementToast, toast, 3, new Color(1f,.9f,.3f));
+        }
+
+        if (!paused && !gameOver && UseMobileLayout())
+        {
+            DrawTouchPad();
         }
 
         if (paused)
@@ -900,6 +933,7 @@ public class Snake : MonoBehaviour
 
     private bool DrawStartOverlay()
     {
+        if (UseMobileLayout()) return DrawMobileStartOverlay();
         DrawPixelRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.01f, 0.03f, 0.06f, 0.76f));
 
         int panelWidth = Mathf.Min(760, Screen.width - 32);
@@ -940,6 +974,7 @@ public class Snake : MonoBehaviour
                 selectedMode = (GameMode)i;
                 PlayerPrefs.SetInt("SnakeMode", i);
                 PlayerPrefs.Save();
+                ApplyModeRules();
             }
         }
         DrawCenteredPixelText("ESPACIO O ENTER", panelY + 385, 2, Color.white, 0);
@@ -951,8 +986,156 @@ public class Snake : MonoBehaviour
         return playClicked;
     }
 
+    private static bool UseMobileLayout()
+    {
+#if UNITY_EDITOR
+        // En el editor, una ventana angosta sirve para previsualizar el móvil.
+        return Application.isMobilePlatform || Screen.width < 700;
+#else
+        // En builds de escritorio nunca activamos controles táctiles.
+        return Application.isMobilePlatform;
+#endif
+    }
+
+    private bool DrawMobileStartOverlay()
+    {
+        DrawPixelRect(new Rect(0, 0, Screen.width, Screen.height), new Color(.01f,.03f,.06f,.8f));
+        Rect safe = Screen.safeArea;
+        float top = Screen.height - safe.yMax;
+        float width = Mathf.Min(Screen.width - 20f, 440f);
+        float height = Mathf.Min(safe.height - 20f, 650f);
+        Rect panel = new Rect((Screen.width-width)/2f, top+(safe.height-height)/2f, width, height);
+        DrawPixelRect(new Rect(panel.x+7,panel.y+7,panel.width,panel.height),new Color(0,0,0,.5f));
+        DrawPixelRect(panel,new Color(.04f,.09f,.15f,.98f));
+        DrawPixelBorder(panel,5,new Color(.24f,.9f,.46f));
+        DrawPixelBorder(new Rect(panel.x+10,panel.y+10,panel.width-20,panel.height-20),2,new Color(.28f,.43f,.5f));
+
+        int titleScale=Mathf.Clamp(Mathf.FloorToInt(width/48f),5,8);
+        DrawCenteredPixelText("SNAKE",Mathf.RoundToInt(panel.y+28),titleScale,new Color(1f,.9f,.25f),0);
+        Rect play=new Rect(panel.x+24,panel.y+105,panel.width-48,54);
+        Rect settings=new Rect(panel.x+24,panel.y+169,panel.width-48,50);
+        bool playClicked=DrawPixelButton(play,"JUGAR",true,4);
+        if(DrawPixelButton(settings,"AJUSTES",false,3))
+        {
+            pendingSkinIndex=activeSkinIndex; pendingVolume=AudioListener.volume; settingsOpen=true;
+        }
+        DrawCenteredPixelText("MODO",Mathf.RoundToInt(panel.y+244),3,Color.white,0);
+        string[] labels={"CLASICO","CONTRA","SIN MUROS"};
+        for(int i=0;i<labels.Length;i++)
+        {
+            Rect mode=new Rect(panel.x+34,panel.y+278+i*57,panel.width-68,46);
+            if(DrawPixelButton(mode,labels[i],(int)selectedMode==i,2))
+            {
+                selectedMode=(GameMode)i; PlayerPrefs.SetInt("SnakeMode",i); PlayerPrefs.Save();
+                ApplyModeRules();
+            }
+        }
+        float footer=panel.y+panel.height-94;
+        DrawCenteredPixelText("TOCA EL PAD PARA MOVER",Mathf.RoundToInt(footer),2,new Color(.65f,.8f,.88f),0);
+        DrawCenteredPixelText("RECORD "+bestScore.ToString("D3"),Mathf.RoundToInt(footer+30),2,new Color(1f,.9f,.3f),0);
+        DrawCenteredPixelText("LOGROS "+GetAchievementCount()+"/5",Mathf.RoundToInt(footer+58),2,new Color(.65f,.95f,.72f),0);
+        return playClicked;
+    }
+
+    private void DrawMobileSettingsOverlay()
+    {
+        DrawPixelRect(new Rect(0,0,Screen.width,Screen.height),new Color(.01f,.03f,.06f,.84f));
+        Rect safe=Screen.safeArea;
+        float top=Screen.height-safe.yMax;
+        Rect panel=new Rect(10,top+10,Screen.width-20,safe.height-20);
+        DrawPixelRect(panel,new Color(.04f,.09f,.15f,.99f));
+        DrawPixelBorder(panel,5,new Color(.48f,.9f,.58f));
+        DrawCenteredPixelText("AJUSTES",Mathf.RoundToInt(panel.y+24),5,new Color(1f,.9f,.3f),0);
+        DrawCenteredPixelText("COLOR",Mathf.RoundToInt(panel.y+82),3,Color.white,0);
+        float gap=6f, area=panel.width-28f;
+        float cardWidth=(area-gap*4f)/5f;
+        for(int i=0;i<5;i++)
+        {
+            Rect card=new Rect(panel.x+14+i*(cardWidth+gap),panel.y+120,cardWidth,82);
+            DrawPixelRect(card,new Color(.07f,.14f,.22f));
+            DrawPixelBorder(card,pendingSkinIndex==i?4:2,pendingSkinIndex==i?new Color(1f,.9f,.3f):new Color(.3f,.75f,.48f));
+            DrawWormPreview(card,SkinColors[i]);
+            if(IsLeftClick(card)){pendingSkinIndex=i;ApplySkinColor(i);}
+        }
+        DrawCenteredPixelText("SONIDO",Mathf.RoundToInt(panel.y+235),3,Color.white,0);
+        Rect minus=new Rect(panel.x+24,panel.y+275,54,48);
+        Rect plus=new Rect(panel.xMax-78,panel.y+275,54,48);
+        if(DrawPixelButton(minus,"-",false,4)) pendingVolume=Mathf.Max(0,pendingVolume-.1f);
+        if(DrawPixelButton(plus,"+",false,4)) pendingVolume=Mathf.Min(1,pendingVolume+.1f);
+        AudioListener.volume=pendingVolume;
+        float meterX=minus.xMax+12, meterWidth=plus.x-meterX-12;
+        for(int i=0;i<10;i++)
+        {
+            Rect block=new Rect(meterX+i*meterWidth/10f,panel.y+288,meterWidth/10f-3,22);
+            DrawPixelRect(block,i<Mathf.RoundToInt(pendingVolume*10)?new Color(.48f,.9f,.58f):new Color(.11f,.2f,.27f));
+        }
+        Rect back=new Rect(panel.x+20,panel.yMax-66,(panel.width-50)/2f,48);
+        Rect apply=new Rect(back.xMax+10,panel.yMax-66,(panel.width-50)/2f,48);
+        if(DrawPixelButton(back,"VOLVER",false,2)) CancelSettings();
+        if(DrawPixelButton(apply,"APLICAR",true,2))
+        {
+            activeSkinIndex=pendingSkinIndex; ApplySkinColor(activeSkinIndex);
+            PlayerPrefs.SetInt("SnakeSkin",activeSkinIndex); PlayerPrefs.SetFloat("SnakeVolume",pendingVolume);
+            PlayerPrefs.Save(); settingsOpen=false;
+        }
+    }
+
+    private void DrawTouchPad()
+    {
+        GetTouchPadRects(out Rect up,out Rect down,out Rect leftButton,out Rect rightButton);
+        if(DrawPadButton(up,Vector2Int.up)) QueueDirection(Vector2Int.up);
+        if(DrawPadButton(down,Vector2Int.down)) QueueDirection(Vector2Int.down);
+        if(DrawPadButton(leftButton,Vector2Int.left)) QueueDirection(Vector2Int.left);
+        if(DrawPadButton(rightButton,Vector2Int.right)) QueueDirection(Vector2Int.right);
+    }
+
+    private static void GetTouchPadRects(out Rect up,out Rect down,out Rect leftButton,out Rect rightButton)
+    {
+        Rect safe=Screen.safeArea;
+        float size=Mathf.Clamp(Screen.width*.16f,54f,76f);
+        float gap=5f;
+        float x=safe.x+18f;
+        float bottomInset=safe.y+16f;
+        float y=Screen.height-bottomInset-size*2f-gap;
+        up=new Rect(x+size+gap,y,size,size);
+        down=new Rect(x+size+gap,y+size+gap,size,size);
+        leftButton=new Rect(x,y+size+gap,size,size);
+        rightButton=new Rect(x+(size+gap)*2f,y+size+gap,size,size);
+    }
+
+    private static bool DrawPadButton(Rect rect,Vector2Int arrow)
+    {
+        bool pressed=rect.Contains(Event.current.mousePosition) && Event.current.type==EventType.MouseDown;
+        DrawPixelRect(new Rect(rect.x+4,rect.y+4,rect.width,rect.height),new Color(0,0,0,.38f));
+        DrawPixelRect(rect,pressed?new Color(.25f,.7f,.42f,.9f):new Color(.05f,.12f,.19f,.72f));
+        DrawPixelBorder(rect,3,new Color(.48f,.9f,.58f,.9f));
+        Vector2 c=rect.center;
+        float unit=rect.width*.12f;
+        if(arrow==Vector2Int.up) DrawPixelArrow(c,unit,0);
+        else if(arrow==Vector2Int.right) DrawPixelArrow(c,unit,1);
+        else if(arrow==Vector2Int.down) DrawPixelArrow(c,unit,2);
+        else DrawPixelArrow(c,unit,3);
+        return IsLeftClick(rect);
+    }
+
+    private static void DrawPixelArrow(Vector2 center,float unit,int turns)
+    {
+        Vector2[] cells={new Vector2(0,-2),new Vector2(-1,-1),new Vector2(0,-1),new Vector2(1,-1),new Vector2(0,0),new Vector2(0,1),new Vector2(0,2)};
+        foreach(Vector2 source in cells)
+        {
+            Vector2 p=source;
+            for(int i=0;i<turns;i++) p=new Vector2(-p.y,p.x);
+            DrawPixelRect(new Rect(center.x+p.x*unit-unit*.5f,center.y+p.y*unit-unit*.5f,unit,unit),Color.white);
+        }
+    }
+
     private void DrawSettingsOverlay()
     {
+        if (UseMobileLayout())
+        {
+            DrawMobileSettingsOverlay();
+            return;
+        }
         DrawPixelRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.01f, 0.03f, 0.06f, 0.82f));
 
         int panelWidth = Mathf.Min(900, Screen.width - 32);
@@ -1101,7 +1284,8 @@ public class Snake : MonoBehaviour
         int textWidth = (versionText.Length * 6 - 1) * pixelSize;
         int badgeWidth = textWidth + 20;
         const int badgeHeight = 30;
-        Rect badge = new Rect(10, Screen.height - badgeHeight - 10, badgeWidth, badgeHeight);
+        float badgeX = UseMobileLayout() ? Screen.width - badgeWidth - 10 : 10;
+        Rect badge = new Rect(badgeX, Screen.height - badgeHeight - 10, badgeWidth, badgeHeight);
 
         DrawPixelRect(new Rect(badge.x + 3, badge.y + 3, badge.width, badge.height), new Color(0f, 0f, 0f, 0.38f));
         DrawPixelRect(badge, new Color(0.03f, 0.07f, 0.12f, 0.82f));
@@ -1111,6 +1295,11 @@ public class Snake : MonoBehaviour
 
     private void DrawPauseOverlay()
     {
+        if (UseMobileLayout())
+        {
+            DrawMobilePauseOverlay();
+            return;
+        }
         DrawPixelRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.01f, 0.03f, 0.06f, 0.72f));
 
         int panelWidth = Mathf.Min(700, Screen.width - 32);
@@ -1142,6 +1331,20 @@ public class Snake : MonoBehaviour
         }
 
         DrawCenteredPixelText("P O ESC PARA SEGUIR", panelY + 286, 2, new Color(0.62f, 0.76f, 0.84f), 0);
+    }
+
+    private void DrawMobilePauseOverlay()
+    {
+        DrawPixelRect(new Rect(0,0,Screen.width,Screen.height),new Color(.01f,.03f,.06f,.76f));
+        Rect panel=new Rect(16,(Screen.height-340)/2f,Screen.width-32,340);
+        DrawPixelRect(panel,new Color(.04f,.09f,.15f,.98f));
+        DrawPixelBorder(panel,6,new Color(.12f,.78f,.28f));
+        DrawCenteredPixelText("PAUSA",Mathf.RoundToInt(panel.y+34),6,new Color(1f,.9f,.25f),0);
+        DrawCenteredPixelText("SCORE "+score.ToString("D3"),Mathf.RoundToInt(panel.y+102),3,new Color(.65f,.95f,.72f),0);
+        Rect resume=new Rect(panel.x+26,panel.y+155,panel.width-52,56);
+        Rect home=new Rect(panel.x+26,panel.y+230,panel.width-52,56);
+        if(DrawPixelButton(resume,"CONTINUAR",true,3)) paused=false;
+        if(DrawPixelButton(home,"INICIO",false,3)) ReturnToMainMenu();
     }
 
     private static void DrawAppleIcon(Rect destination)

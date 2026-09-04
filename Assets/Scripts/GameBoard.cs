@@ -6,6 +6,7 @@ public static class GameBoard
     private const float ScreenInset = 0.25f;
     private static Sprite squareSprite;
     private static Sprite checkerSprite;
+    private static bool wallsEnabled = true;
 
     public static float LeftBoundary { get; private set; }
     public static float RightBoundary { get; private set; }
@@ -54,6 +55,7 @@ public static class GameBoard
         CreateWall(walls.transform, "Bottom", new Vector2(LeftBoundary, BottomBoundary), new Vector2(RightBoundary, BottomBoundary));
         CreateWall(walls.transform, "Left", new Vector2(LeftBoundary, BottomBoundary), new Vector2(LeftBoundary, TopBoundary));
         CreateWall(walls.transform, "Right", new Vector2(RightBoundary, BottomBoundary), new Vector2(RightBoundary, TopBoundary));
+        SetWallsEnabled(wallsEnabled);
     }
 
     private static void CreateCheckerboard(Transform parent)
@@ -95,6 +97,22 @@ public static class GameBoard
         if (centerPosition.y - 0.5f < BottomBoundary) centerPosition.y = TopBoundary - 0.5f;
         else if (centerPosition.y + 0.5f > TopBoundary) centerPosition.y = BottomBoundary + 0.5f;
         return centerPosition;
+    }
+
+    public static void SetWallsEnabled(bool enabled)
+    {
+        wallsEnabled = enabled;
+        GameObject root = GameObject.Find("Board Walls");
+        if (root == null) return;
+
+        foreach (Transform child in root.transform)
+        {
+            if (child.name == "Checkerboard") continue;
+            EdgeCollider2D collider = child.GetComponent<EdgeCollider2D>();
+            if (collider != null) collider.enabled = enabled;
+            SpriteRenderer[] renderers = child.GetComponentsInChildren<SpriteRenderer>(true);
+            foreach (SpriteRenderer renderer in renderers) renderer.enabled = enabled;
+        }
     }
 
     private static void CreateWall(Transform parent, string name, Vector2 start, Vector2 end)
