@@ -936,8 +936,8 @@ public class Snake : MonoBehaviour
         if (UseMobileLayout()) return DrawMobileStartOverlay();
         DrawPixelRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.01f, 0.03f, 0.06f, 0.76f));
 
-        int panelWidth = Mathf.Min(760, Screen.width - 32);
-        int panelHeight = Mathf.Min(520, Screen.height - 32);
+        int panelWidth = Mathf.Min(900, Screen.width - 40);
+        int panelHeight = Mathf.Min(600, Screen.height - 40);
         int panelX = (Screen.width - panelWidth) / 2;
         int panelY = (Screen.height - panelHeight) / 2;
         Rect panel = new Rect(panelX, panelY, panelWidth, panelHeight);
@@ -948,13 +948,13 @@ public class Snake : MonoBehaviour
         DrawPixelBorder(new Rect(panel.x + 16, panel.y + 16, panel.width - 32, panel.height - 32), 3, new Color(0.28f, 0.43f, 0.5f));
         DrawPixelRect(new Rect(panel.x + 8, panel.y + 8, panel.width - 16, 5), new Color(1f, 0.9f, 0.3f));
 
-        int titleScale = Mathf.Clamp((panelWidth - 100) / 35, 8, 14);
-        DrawCenteredPixelText("SNAKE", panelY + 50, titleScale, new Color(0f, 0f, 0f, 0.8f), 6);
-        DrawCenteredPixelText("SNAKE", panelY + 44, titleScale, new Color(1f, 0.9f, 0.25f), 0);
-        DrawCenteredPixelText("GAME", panelY + 145, 3, new Color(0.65f, 0.95f, 0.72f), 0);
+        int titleScale = Mathf.Clamp((panelWidth - 120) / 44, 9, 14);
+        DrawCenteredPixelText("SNAKE", panelY + 58, titleScale, new Color(0f, 0f, 0f, 0.8f), 6);
+        DrawCenteredPixelText("SNAKE", panelY + 52, titleScale, new Color(1f, 0.9f, 0.25f), 0);
+        DrawCenteredPixelText("GAME", panelY + 164, 3, new Color(0.65f, 0.95f, 0.72f), 0);
 
-        Rect playButton = new Rect(panelX + panelWidth / 2 - 260, panelY + 185, 245, 62);
-        Rect settingsButton = new Rect(panelX + panelWidth / 2 + 15, panelY + 185, 245, 62);
+        Rect playButton = new Rect(panelX + panelWidth / 2 - 300, panelY + 210, 280, 70);
+        Rect settingsButton = new Rect(panelX + panelWidth / 2 + 20, panelY + 210, 280, 70);
         bool playClicked = DrawPixelButton(playButton, "JUGAR", true, 4);
         if (DrawPixelButton(settingsButton, "AJUSTES", false, 3))
         {
@@ -963,12 +963,12 @@ public class Snake : MonoBehaviour
             settingsOpen = true;
         }
 
-        DrawCenteredPixelText("MODO", panelY + 275, 3, Color.white, 0);
-        float modeWidth = (panelWidth - 80f) / 3f;
+        DrawCenteredPixelText("MODO", panelY + 316, 3, Color.white, 0);
+        float modeWidth = (panelWidth - 100f) / 3f;
         string[] modeLabels = { "CLASICO", "CONTRA", "SIN MUROS" };
         for (int i = 0; i < 3; i++)
         {
-            Rect modeButton = new Rect(panelX + 30 + i * (modeWidth + 10), panelY + 310, modeWidth, 52);
+            Rect modeButton = new Rect(panelX + 40 + i * (modeWidth + 10), panelY + 354, modeWidth, 60);
             if (DrawPixelButton(modeButton, modeLabels[i], (int)selectedMode == i, 2))
             {
                 selectedMode = (GameMode)i;
@@ -977,11 +977,11 @@ public class Snake : MonoBehaviour
                 ApplyModeRules();
             }
         }
-        DrawCenteredPixelText("ESPACIO O ENTER", panelY + 385, 2, Color.white, 0);
-        DrawPixelRect(new Rect(panelX + 70, panelY + 418, panelWidth - 140, 3), new Color(0.12f, 0.58f, 0.34f));
-        DrawCenteredPixelText("WASD O FLECHAS", panelY + 435, 2, new Color(0.65f, 0.8f, 0.88f), 0);
-        DrawCenteredPixelText("RECORD " + bestScore.ToString("D3"), panelY + 458, 2, new Color(1f, 0.9f, 0.3f), 0);
-        DrawCenteredPixelText("LOGROS " + GetAchievementCount() + "/5", panelY + 488, 2, new Color(.65f, .95f, .72f), 0);
+        DrawCenteredPixelText("ESPACIO O ENTER", panelY + 450, 2, Color.white, 0);
+        DrawPixelRect(new Rect(panelX + 95, panelY + 486, panelWidth - 190, 3), new Color(0.12f, 0.68f, 0.42f));
+        DrawCenteredPixelText("WASD O FLECHAS", panelY + 510, 2, new Color(0.65f, 0.8f, 0.88f), 0);
+        DrawCenteredPixelText("RECORD " + bestScore.ToString("D3"), panelY + 544, 2, new Color(1f, 0.9f, 0.3f), 0);
+        DrawCenteredPixelText("LOGROS " + GetAchievementCount() + "/5", panelY + 570, 2, new Color(.65f, .95f, .72f), 0);
 
         return playClicked;
     }

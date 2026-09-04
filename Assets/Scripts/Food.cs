@@ -17,9 +17,11 @@ public class Food : MonoBehaviour
     void Awake()
     {
         gameObject.tag="Food";
-        spriteRenderer=GetComponent<SpriteRenderer>() ?? gameObject.AddComponent<SpriteRenderer>();
+        spriteRenderer=GetComponent<SpriteRenderer>();
+        if(spriteRenderer==null) spriteRenderer=gameObject.AddComponent<SpriteRenderer>();
         if(spriteRenderer.sprite==null) spriteRenderer.sprite=Resources.Load<Sprite>("Apple");
-        CircleCollider2D collider=GetComponent<CircleCollider2D>() ?? gameObject.AddComponent<CircleCollider2D>();
+        CircleCollider2D collider=GetComponent<CircleCollider2D>();
+        if(collider==null) collider=gameObject.AddComponent<CircleCollider2D>();
         collider.isTrigger=true; collider.radius=.42f;
     }
 
