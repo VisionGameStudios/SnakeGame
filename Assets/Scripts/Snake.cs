@@ -56,6 +56,8 @@ public class Snake : MonoBehaviour
     private bool usingGamepad;
     private bool tutorialOpen;
     private ControlScheme tutorialScheme;
+    private bool pointerStartRequested;
+    private ControlScheme pointerStartScheme;
     private AudioSource audioSource;
     private AudioClip eatSound;
     private AudioClip moveSound;
@@ -143,6 +145,11 @@ public class Snake : MonoBehaviour
 
     private void Update()
     {
+        if(pointerStartRequested&&!gameStarted&&!tutorialOpen)
+        {
+            pointerStartRequested=false;
+            RequestStart(pointerStartScheme);
+        }
         if (Keyboard.current != null && Keyboard.current.anyKey.wasPressedThisFrame) usingGamepad=false;
         HandleGamepadInput();
         if(tutorialOpen)
@@ -1116,7 +1123,8 @@ public class Snake : MonoBehaviour
 
             if (DrawStartOverlay())
             {
-                RequestStart(Application.isMobilePlatform?ControlScheme.Touch:ControlScheme.Keyboard);
+                pointerStartScheme=Application.isMobilePlatform?ControlScheme.Touch:ControlScheme.Keyboard;
+                pointerStartRequested=true;
             }
             DrawVersionBadge();
             return;
