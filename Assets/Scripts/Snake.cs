@@ -21,6 +21,7 @@ public class Snake : MonoBehaviour
     private static Sprite deadHeadSprite;
     private static Sprite[] deadHeadFrames;
     private static Sprite appleUiSprite;
+    private static Texture2D inputPromptsTexture;
     private static Material skinMaterial;
     private static int activeSkinIndex;
     private static readonly Color[] SkinColors =
@@ -46,6 +47,7 @@ public class Snake : MonoBehaviour
     private bool boardCompleted;
     private string achievementToast = "";
     private float achievementToastUntil;
+    private bool gamepadStickLatched;
     private AudioSource audioSource;
     private AudioClip eatSound;
     private AudioClip moveSound;
@@ -133,6 +135,8 @@ public class Snake : MonoBehaviour
 
     private void Update()
     {
+        HandleGamepadInput();
+
         if (!gameStarted)
         {
             if (settingsOpen)
@@ -212,6 +216,112 @@ public class Snake : MonoBehaviour
             QueueDirection(Vector2Int.left);
         if (WasPressed(Key.D, KeyCode.D) || WasPressed(Key.RightArrow, KeyCode.RightArrow))
             QueueDirection(Vector2Int.right);
+    }
+
+    private void HandleGamepadInput()
+    {
+        Gamepad pad = Gamepad.current;
+        if (pad == null) return;
+
+        if (!gameStarted)
+        {
+            if (settingsOpen)
+            {
+                if (pad.buttonEast.wasPressedThisFrame) CancelSettings();
+                if (pad.dpad.left.wasPressedThisFrame) SelectPreviousSkin();
+                if (pad.dpad.right.wasPressedThisFrame) SelectNextSkin();
+                if (pad.dpad.down.wasPressedThisFrame) ChangeVolume(-.1f);
+                if (pad.dpad.up.wasPressedThisFrame) ChangeVolume(.1f);
+                if (pad.buttonSouth.wasPressedThisFrame) ApplySettings();
+                return;
+            }
+
+            if (pad.leftShoulder.wasPressedThisFrame) ChangeMode(-1);
+            if (pad.rightShoulder.wasPressedThisFrame) ChangeMode(1);
+            if (pad.buttonNorth.wasPressedThisFrame)
+            {
+                pendingSkinIndex=activeSkinIndex;
+                pendingVolume=AudioListener.volume;
+                settingsOpen=true;
+                return;
+            }
+            if (pad.buttonSouth.wasPressedThisFrame) gameStarted=true;
+            return;
+        }
+
+        if (gameOver)
+        {
+            if (pad.buttonSouth.wasPressedThisFrame) RestartGame();
+            else if (pad.buttonEast.wasPressedThisFrame) ReturnToMainMenu();
+            return;
+        }
+
+        if (paused)
+        {
+            if (pad.buttonSouth.wasPressedThisFrame || pad.startButton.wasPressedThisFrame) paused=false;
+            else if (pad.buttonEast.wasPressedThisFrame) ReturnToMainMenu();
+            return;
+        }
+
+        if (pad.startButton.wasPressedThisFrame)
+        {
+            paused=true;
+            return;
+        }
+
+        Vector2Int requested=Vector2Int.zero;
+        if (pad.dpad.up.wasPressedThisFrame) requested=Vector2Int.up;
+        else if (pad.dpad.down.wasPressedThisFrame) requested=Vector2Int.down;
+        else if (pad.dpad.left.wasPressedThisFrame) requested=Vector2Int.left;
+        else if (pad.dpad.right.wasPressedThisFrame) requested=Vector2Int.right;
+
+        Vector2 stick=pad.leftStick.ReadValue();
+        if (stick.magnitude < .45f) gamepadStickLatched=false;
+        else if (!gamepadStickLatched && requested==Vector2Int.zero)
+        {
+            requested=Mathf.Abs(stick.x)>Mathf.Abs(stick.y)
+                ? (stick.x>0?Vector2Int.right:Vector2Int.left)
+                : (stick.y>0?Vector2Int.up:Vector2Int.down);
+            gamepadStickLatched=true;
+        }
+
+        if (requested!=Vector2Int.zero) QueueDirection(requested);
+    }
+
+    private void ChangeMode(int delta)
+    {
+        selectedMode=(GameMode)(((int)selectedMode+delta+3)%3);
+        PlayerPrefs.SetInt("SnakeMode",(int)selectedMode);
+        PlayerPrefs.Save();
+        ApplyModeRules();
+    }
+
+    private void SelectPreviousSkin()
+    {
+        pendingSkinIndex=(pendingSkinIndex-1+SkinColors.Length)%SkinColors.Length;
+        ApplySkinColor(pendingSkinIndex);
+    }
+
+    private void SelectNextSkin()
+    {
+        pendingSkinIndex=(pendingSkinIndex+1)%SkinColors.Length;
+        ApplySkinColor(pendingSkinIndex);
+    }
+
+    private void ChangeVolume(float delta)
+    {
+        pendingVolume=Mathf.Clamp01(pendingVolume+delta);
+        AudioListener.volume=pendingVolume;
+    }
+
+    private void ApplySettings()
+    {
+        activeSkinIndex=pendingSkinIndex;
+        ApplySkinColor(activeSkinIndex);
+        PlayerPrefs.SetInt("SnakeSkin",activeSkinIndex);
+        PlayerPrefs.SetFloat("SnakeVolume",pendingVolume);
+        PlayerPrefs.Save();
+        settingsOpen=false;
     }
 
     private static bool WasPressed(Key key, KeyCode fallback)
@@ -927,7 +1037,8 @@ public class Snake : MonoBehaviour
         DrawPixelRect(new Rect(panelX + 90, panelY + 120, panelWidth - 180, 4), new Color(0.1f, 0.7f, 0.25f));
         DrawCenteredPixelText("SCORE " + score.ToString("D3"), panelY + 145, 4, Color.white, 0);
         DrawCenteredPixelText("RECORD " + bestScore.ToString("D3"), panelY + 185, 3, new Color(0.65f, 0.95f, 0.72f), 0);
-        DrawCenteredPixelText("R O ESPACIO PARA REINICIAR", panelY + 239, 3, new Color(1f, 0.9f, 0.3f), 0);
+        string restartPrompt=UseMobileLayout()?"A PARA REINICIAR":"R ESPACIO O A PARA REINICIAR";
+        DrawCenteredPixelText(restartPrompt, panelY + 239, UseMobileLayout()?2:3, new Color(1f, 0.9f, 0.3f), 0);
         DrawVersionBadge();
     }
 
@@ -977,9 +1088,9 @@ public class Snake : MonoBehaviour
                 ApplyModeRules();
             }
         }
-        DrawCenteredPixelText("ESPACIO O ENTER", panelY + 450, 2, Color.white, 0);
+        DrawCenteredPixelText("ESPACIO ENTER O A", panelY + 450, 2, Color.white, 0);
         DrawPixelRect(new Rect(panelX + 95, panelY + 486, panelWidth - 190, 3), new Color(0.12f, 0.68f, 0.42f));
-        DrawCenteredPixelText("WASD O FLECHAS", panelY + 510, 2, new Color(0.65f, 0.8f, 0.88f), 0);
+        DrawCenteredPixelText("WASD FLECHAS O CONTROL", panelY + 510, 2, new Color(0.65f, 0.8f, 0.88f), 0);
         DrawCenteredPixelText("RECORD " + bestScore.ToString("D3"), panelY + 544, 2, new Color(1f, 0.9f, 0.3f), 0);
         DrawCenteredPixelText("LOGROS " + GetAchievementCount() + "/5", panelY + 570, 2, new Color(.65f, .95f, .72f), 0);
 
@@ -1031,7 +1142,7 @@ public class Snake : MonoBehaviour
             }
         }
         float footer=panel.y+panel.height-94;
-        DrawCenteredPixelText("TOCA EL PAD PARA MOVER",Mathf.RoundToInt(footer),2,new Color(.65f,.8f,.88f),0);
+        DrawCenteredPixelText("PAD O CONTROL PARA MOVER",Mathf.RoundToInt(footer),2,new Color(.65f,.8f,.88f),0);
         DrawCenteredPixelText("RECORD "+bestScore.ToString("D3"),Mathf.RoundToInt(footer+30),2,new Color(1f,.9f,.3f),0);
         DrawCenteredPixelText("LOGROS "+GetAchievementCount()+"/5",Mathf.RoundToInt(footer+58),2,new Color(.65f,.95f,.72f),0);
         return playClicked;
@@ -1069,6 +1180,7 @@ public class Snake : MonoBehaviour
             Rect block=new Rect(meterX+i*meterWidth/10f,panel.y+288,meterWidth/10f-3,22);
             DrawPixelRect(block,i<Mathf.RoundToInt(pendingVolume*10)?new Color(.48f,.9f,.58f):new Color(.11f,.2f,.27f));
         }
+        DrawControlsGuide(new Rect(panel.x+20,panel.y+350,panel.width-40,145));
         Rect back=new Rect(panel.x+20,panel.yMax-66,(panel.width-50)/2f,48);
         Rect apply=new Rect(back.xMax+10,panel.yMax-66,(panel.width-50)/2f,48);
         if(DrawPixelButton(back,"VOLVER",false,2)) CancelSettings();
@@ -1139,7 +1251,7 @@ public class Snake : MonoBehaviour
         DrawPixelRect(new Rect(0, 0, Screen.width, Screen.height), new Color(0.01f, 0.03f, 0.06f, 0.82f));
 
         int panelWidth = Mathf.Min(900, Screen.width - 32);
-        int panelHeight = Mathf.Min(520, Screen.height - 32);
+        int panelHeight = Mathf.Min(640, Screen.height - 32);
         int panelX = (Screen.width - panelWidth) / 2;
         int panelY = (Screen.height - panelHeight) / 2;
         Rect panel = new Rect(panelX, panelY, panelWidth, panelHeight);
@@ -1150,17 +1262,17 @@ public class Snake : MonoBehaviour
         DrawPixelBorder(new Rect(panel.x + 14, panel.y + 14, panel.width - 28, panel.height - 28), 2, new Color(0.25f, 0.42f, 0.5f));
 
         DrawCenteredPixelText("AJUSTES", panelY + 35, 7, new Color(1f, 0.9f, 0.3f), 0);
-        DrawPixelRect(new Rect(panelX + 55, panelY + 105, panelWidth - 110, 3), new Color(0.3f, 0.78f, 0.5f));
-        DrawCenteredPixelText("COLOR DEL GUSANO", panelY + 124, 3, Color.white, 0);
+        DrawPixelRect(new Rect(panelX + 55, panelY + 92, panelWidth - 110, 3), new Color(0.3f, 0.78f, 0.5f));
+        DrawCenteredPixelText("COLOR DEL GUSANO", panelY + 108, 3, Color.white, 0);
 
         float cardGap = 10f;
         float cardsAreaWidth = panelWidth - 90f;
         float cardWidth = (cardsAreaWidth - cardGap * (SkinColors.Length - 1)) / SkinColors.Length;
         float cardsX = panelX + 45f;
-        float cardsY = panelY + 172f;
+        float cardsY = panelY + 145f;
         for (int i = 0; i < SkinColors.Length; i++)
         {
-            Rect card = new Rect(cardsX + i * (cardWidth + cardGap), cardsY, cardWidth, 112f);
+            Rect card = new Rect(cardsX + i * (cardWidth + cardGap), cardsY, cardWidth, 92f);
             bool selected = pendingSkinIndex == i;
             bool hovered = card.Contains(Event.current.mousePosition);
             DrawPixelRect(new Rect(card.x + 4, card.y + 4, card.width, card.height), new Color(0f, 0f, 0f, 0.45f));
@@ -1181,23 +1293,25 @@ public class Snake : MonoBehaviour
             }
         }
 
-        DrawPixelRect(new Rect(panelX + 55, panelY + 313, panelWidth - 110, 3), new Color(0.3f, 0.78f, 0.5f));
-        DrawCenteredPixelText("SONIDO", panelY + 332, 3, Color.white, 0);
+        DrawPixelRect(new Rect(panelX + 55, panelY + 260, panelWidth - 110, 3), new Color(0.3f, 0.78f, 0.5f));
+        DrawCenteredPixelText("SONIDO", panelY + 276, 3, Color.white, 0);
 
-        Rect minusButton = new Rect(panelX + panelWidth / 2 - 205, panelY + 372, 58, 48);
-        Rect plusButton = new Rect(panelX + panelWidth / 2 + 147, panelY + 372, 58, 48);
+        Rect minusButton = new Rect(panelX + panelWidth / 2 - 205, panelY + 312, 58, 44);
+        Rect plusButton = new Rect(panelX + panelWidth / 2 + 147, panelY + 312, 58, 44);
         if (DrawPixelButton(minusButton, "-", false, 4)) pendingVolume = Mathf.Max(0f, pendingVolume - 0.1f);
         if (DrawPixelButton(plusButton, "+", false, 4)) pendingVolume = Mathf.Min(1f, pendingVolume + 0.1f);
         AudioListener.volume = pendingVolume;
 
         for (int i = 0; i < 10; i++)
         {
-            Rect block = new Rect(panelX + panelWidth / 2 - 130 + i * 27, panelY + 384, 19, 23);
+            Rect block = new Rect(panelX + panelWidth / 2 - 130 + i * 27, panelY + 323, 19, 21);
             DrawPixelRect(block, i < Mathf.RoundToInt(pendingVolume * 10f)
                 ? new Color(0.48f, 0.9f, 0.58f)
                 : new Color(0.11f, 0.2f, 0.27f));
             DrawPixelBorder(block, 2, new Color(0.3f, 0.64f, 0.45f));
         }
+
+        DrawControlsGuide(new Rect(panelX + 55, panelY + 382, panelWidth - 110, 150));
 
         Rect backButton = new Rect(panelX + 70, panelY + panelHeight - 72, 230, 48);
         Rect applyButton = new Rect(panelX + panelWidth - 300, panelY + panelHeight - 72, 230, 48);
@@ -1243,6 +1357,63 @@ public class Snake : MonoBehaviour
         float headX = startX + 2f * (size - 2f);
         DrawPixelRect(new Rect(headX + size * 0.62f, y + size * 0.24f, 3, 5), Color.white);
         DrawPixelRect(new Rect(headX + size * 0.62f, y + size * 0.56f, 3, 5), Color.white);
+    }
+
+    private static void DrawControlsGuide(Rect area)
+    {
+        bool controllerConnected=Gamepad.current!=null;
+        DrawPixelRect(new Rect(area.x+4,area.y+4,area.width,area.height),new Color(0,0,0,.35f));
+        DrawPixelRect(area,new Color(.055f,.11f,.17f,.96f));
+        DrawPixelBorder(area,3,controllerConnected?new Color(1f,.82f,.18f):new Color(.35f,.72f,.55f));
+        DrawPixelRect(new Rect(area.x+14,area.y+14,9,9),controllerConnected?new Color(1f,.85f,.2f):new Color(.45f,.8f,.6f));
+        string title=controllerConnected?"CONTROL CONECTADO":"TECLADO";
+        DrawPixelText(title,Mathf.RoundToInt(area.x+34),Mathf.RoundToInt(area.y+12),2,Color.white);
+
+        float icon=controllerConnected?38f:34f;
+        float baseY=area.y+52;
+        if(controllerConnected)
+        {
+            DrawPromptTile(new Rect(area.x+20,baseY,icon,icon),1,0);
+            DrawPromptTile(new Rect(area.x+63,baseY,icon,icon),6,0);
+            DrawPixelText("MOVER",Mathf.RoundToInt(area.x+112),Mathf.RoundToInt(baseY+12),2,new Color(.7f,.9f,.8f));
+
+            float actionX=area.x+area.width*.55f;
+            DrawPromptTile(new Rect(actionX,baseY,icon,icon),0,4);
+            DrawPixelText("ACEPTAR",Mathf.RoundToInt(actionX+46),Mathf.RoundToInt(baseY+2),2,Color.white);
+            DrawPromptTile(new Rect(actionX,baseY+45,icon,icon),0,5);
+            DrawPixelText("VOLVER",Mathf.RoundToInt(actionX+46),Mathf.RoundToInt(baseY+52),2,Color.white);
+            DrawPixelText("START PAUSA",Mathf.RoundToInt(area.x+22),Mathf.RoundToInt(area.y+118),2,new Color(1f,.88f,.35f));
+        }
+        else
+        {
+            float clusterX=area.x+25;
+            DrawPromptTile(new Rect(clusterX+icon,baseY,icon,icon),2,18);
+            DrawPromptTile(new Rect(clusterX,baseY+icon+3,icon,icon),3,17);
+            DrawPromptTile(new Rect(clusterX+icon+3,baseY+icon+3,icon,icon),3,18);
+            DrawPromptTile(new Rect(clusterX+(icon+3)*2,baseY+icon+3,icon,icon),3,19);
+            DrawPixelText("MOVER",Mathf.RoundToInt(clusterX+icon*3+18),Mathf.RoundToInt(baseY+38),2,new Color(.7f,.9f,.8f));
+            float infoX=area.x+area.width*.58f;
+            DrawPixelText("ESPACIO JUGAR",Mathf.RoundToInt(infoX),Mathf.RoundToInt(baseY+4),2,Color.white);
+            DrawPixelText("P ESC PAUSA",Mathf.RoundToInt(infoX),Mathf.RoundToInt(baseY+35),2,Color.white);
+            DrawPixelText("R REINICIAR",Mathf.RoundToInt(infoX),Mathf.RoundToInt(baseY+66),2,new Color(1f,.88f,.35f));
+        }
+    }
+
+    private static void DrawPromptTile(Rect destination,int row,int column)
+    {
+        if(inputPromptsTexture==null)
+        {
+            inputPromptsTexture=Resources.Load<Texture2D>("InputPrompts");
+            if(inputPromptsTexture!=null) inputPromptsTexture.filterMode=FilterMode.Point;
+        }
+        if(inputPromptsTexture==null) return;
+        const float tile=16f, stride=17f;
+        Rect uv=new Rect(
+            column*stride/inputPromptsTexture.width,
+            (inputPromptsTexture.height-row*stride-tile)/inputPromptsTexture.height,
+            tile/inputPromptsTexture.width,
+            tile/inputPromptsTexture.height);
+        GUI.DrawTextureWithTexCoords(destination,inputPromptsTexture,uv,true);
     }
 
     private static bool DrawPixelButton(Rect rect, string label, bool primary, int pixelSize)
@@ -1330,7 +1501,7 @@ public class Snake : MonoBehaviour
             ReturnToMainMenu();
         }
 
-        DrawCenteredPixelText("P O ESC PARA SEGUIR", panelY + 286, 2, new Color(0.62f, 0.76f, 0.84f), 0);
+        DrawCenteredPixelText("P ESC O START PARA SEGUIR", panelY + 286, 2, new Color(0.62f, 0.76f, 0.84f), 0);
     }
 
     private void DrawMobilePauseOverlay()
