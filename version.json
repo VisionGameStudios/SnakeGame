@@ -1,8 +1,14 @@
 {
-  "latestVersion": "1.0.44",
-  "minimumVersion": "1.0.0",
-  "downloadUrl": "https://github.com/VisionGameStudios/SnakeGame/releases/download/v1.0.44/Snake-1.0.44-StandaloneOSX.zip",
-  "sha256": "ca761ad0c61b570cc4a630f9574c0deacd9fde055601749a4d9df0735087060e",
-  "size": 39424488,
-  "message": "Corrección de errores"
+  "latestVersion": "1.0.45",
+  "minimumVersion": "1.0.45",
+  "downloadUrl": "https://github.com/VisionGameStudios/SnakeGame/releases/download/v1.0.45/Snake-1.0.45-macOS.zip",
+  "sha256": "8ce6bda68bb9811729c122e92aceb78cc376bd26d64a2baade413e78e9ad4c76",
+  "size": 39728554,
+  "macDownloadUrl": "https://github.com/VisionGameStudios/SnakeGame/releases/download/v1.0.45/Snake-1.0.45-macOS.zip",
+  "macSha256": "8ce6bda68bb9811729c122e92aceb78cc376bd26d64a2baade413e78e9ad4c76",
+  "macSize": 39728554,
+  "windowsDownloadUrl": "https://github.com/VisionGameStudios/SnakeGame/releases/download/v1.0.45/Snake-1.0.45-Windows.zip",
+  "windowsSha256": "0805175a04ac534b2249e6e99fc3938b2522c193cab7985fd80d771aebd63667",
+  "windowsSize": 57258620,
+  "message": "Nueva versión de Snake, compatibilidad con Windows"
 }

@@ -12,7 +12,7 @@ using UnityEngine;
 
 public class ReleasePublisher : EditorWindow
 {
-    private const string PublisherRevision = "2026.09.03.2";
+    private const string PublisherRevision = "2026.09.08.1";
     private const string RepositoryOwner = "VisionGameStudios";
     private const string RepositoryName = "SnakeGame";
     private const string KeychainService = "SnakeGame Unity Publisher";
@@ -43,7 +43,7 @@ public class ReleasePublisher : EditorWindow
         EditorGUILayout.LabelField("Publicar nueva versión", EditorStyles.boldLabel);
         EditorGUILayout.LabelField("Publicador " + PublisherRevision, EditorStyles.miniLabel);
         EditorGUILayout.HelpBox(
-            "Genera el build de la plataforma activa, actualiza version.json, publica el código y crea un GitHub Release.",
+            "Genera macOS y Windows, actualiza version.json, publica el código y adjunta ambos builds al GitHub Release.",
             MessageType.Info
         );
 
@@ -123,13 +123,12 @@ public class ReleasePublisher : EditorWindow
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            string installerPath;
-            string archivePath = BuildAndArchive(projectRoot, normalizedVersion, out installerPath);
-            WriteVersionManifest(projectRoot, normalizedVersion, archivePath);
+            ReleaseArtifacts artifacts = BuildAllPlatforms(projectRoot, normalizedVersion);
+            WriteVersionManifest(projectRoot, normalizedVersion, artifacts);
             AssetDatabase.Refresh();
             CommitAndPush(projectRoot, normalizedVersion);
             sourcePublished = true;
-            CreateRelease(normalizedVersion, archivePath, installerPath);
+            CreateRelease(normalizedVersion, artifacts);
 
             status = "Versión " + normalizedVersion + " publicada correctamente.";
             EditorUtility.DisplayDialog("Publicación completada", status, "Aceptar");
@@ -154,24 +153,38 @@ public class ReleasePublisher : EditorWindow
         }
     }
 
-    private void WriteVersionManifest(string projectRoot, string normalizedVersion, string archivePath)
+    private void WriteVersionManifest(string projectRoot, string normalizedVersion, ReleaseArtifacts artifacts)
     {
         string minimumVersion = mandatory ? normalizedVersion : "1.0.0";
-        string archiveName = Path.GetFileName(archivePath);
-        string archiveUrl = "https://github.com/" + RepositoryOwner + "/" + RepositoryName
-            + "/releases/download/v" + normalizedVersion + "/" + Uri.EscapeDataString(archiveName);
-        string sha256 = ComputeSha256(archivePath);
-        long size = new FileInfo(archivePath).Length;
+        string macUrl = GetReleaseAssetUrl(normalizedVersion, artifacts.macArchivePath);
+        string windowsUrl = GetReleaseAssetUrl(normalizedVersion, artifacts.windowsArchivePath);
+        string macSha256 = ComputeSha256(artifacts.macArchivePath);
+        string windowsSha256 = ComputeSha256(artifacts.windowsArchivePath);
+        long macSize = new FileInfo(artifacts.macArchivePath).Length;
+        long windowsSize = new FileInfo(artifacts.windowsArchivePath).Length;
         string escapedNotes = releaseNotes.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n");
         string json = "{\n"
             + "  \"latestVersion\": \"" + normalizedVersion + "\",\n"
             + "  \"minimumVersion\": \"" + minimumVersion + "\",\n"
-            + "  \"downloadUrl\": \"" + archiveUrl + "\",\n"
-            + "  \"sha256\": \"" + sha256 + "\",\n"
-            + "  \"size\": " + size + ",\n"
+            + "  \"downloadUrl\": \"" + macUrl + "\",\n"
+            + "  \"sha256\": \"" + macSha256 + "\",\n"
+            + "  \"size\": " + macSize + ",\n"
+            + "  \"macDownloadUrl\": \"" + macUrl + "\",\n"
+            + "  \"macSha256\": \"" + macSha256 + "\",\n"
+            + "  \"macSize\": " + macSize + ",\n"
+            + "  \"windowsDownloadUrl\": \"" + windowsUrl + "\",\n"
+            + "  \"windowsSha256\": \"" + windowsSha256 + "\",\n"
+            + "  \"windowsSize\": " + windowsSize + ",\n"
             + "  \"message\": \"" + escapedNotes + "\"\n"
             + "}\n";
         File.WriteAllText(Path.Combine(projectRoot, "version.json"), json);
+    }
+
+    private static string GetReleaseAssetUrl(string normalizedVersion, string assetPath)
+    {
+        return "https://github.com/" + RepositoryOwner + "/" + RepositoryName
+            + "/releases/download/v" + normalizedVersion + "/"
+            + Uri.EscapeDataString(Path.GetFileName(assetPath));
     }
 
     private static string NextPatchVersion(string current)
@@ -183,11 +196,43 @@ public class ReleasePublisher : EditorWindow
         return parsed.Major + "." + parsed.Minor + "." + (parsed.Build + 1);
     }
 
-    private static string BuildAndArchive(string projectRoot, string normalizedVersion, out string installerPath)
+    private sealed class ReleaseArtifacts
+    {
+        public string macArchivePath;
+        public string macInstallerPath;
+        public string windowsArchivePath;
+    }
+
+    private static ReleaseArtifacts BuildAllPlatforms(string projectRoot, string normalizedVersion)
+    {
+        var artifacts = new ReleaseArtifacts();
+        artifacts.macArchivePath = BuildAndArchive(
+            projectRoot,
+            normalizedVersion,
+            BuildTarget.StandaloneOSX,
+            out artifacts.macInstallerPath
+        );
+
+        string unusedInstaller;
+        artifacts.windowsArchivePath = BuildAndArchive(
+            projectRoot,
+            normalizedVersion,
+            BuildTarget.StandaloneWindows64,
+            out unusedInstaller
+        );
+        return artifacts;
+    }
+
+    private static string BuildAndArchive(
+        string projectRoot,
+        string normalizedVersion,
+        BuildTarget target,
+        out string installerPath)
     {
         installerPath = null;
-        BuildTarget target = EditorUserBuildSettings.activeBuildTarget;
-        string buildFolder = Path.Combine(projectRoot, "Builds", "Snake-" + normalizedVersion);
+        string platformName = target == BuildTarget.StandaloneOSX ? "macOS" : "Windows";
+        string buildFolder = Path.Combine(projectRoot, "Builds", "Snake-" + normalizedVersion + "-" + platformName);
+        if (Directory.Exists(buildFolder)) Directory.Delete(buildFolder, true);
         Directory.CreateDirectory(buildFolder);
 
         string executableName;
@@ -196,20 +241,32 @@ public class ReleasePublisher : EditorWindow
         else if (target == BuildTarget.StandaloneWindows || target == BuildTarget.StandaloneWindows64)
             executableName = "Snake.exe";
         else
-            throw new InvalidOperationException("Selecciona macOS o Windows en Build Profiles antes de publicar.");
+            throw new InvalidOperationException("Plataforma de publicación no compatible: " + target + ".");
 
         string[] scenes = EditorBuildSettings.scenes.Where(scene => scene.enabled).Select(scene => scene.path).ToArray();
         if (scenes.Length == 0)
             throw new InvalidOperationException("No hay escenas activas en Build Profiles.");
 
-        BuildReport report = BuildPipeline.BuildPlayer(scenes, Path.Combine(buildFolder, executableName), target, BuildOptions.None);
+        BuildReport report;
+        try
+        {
+            report = BuildPipeline.BuildPlayer(scenes, Path.Combine(buildFolder, executableName), target, BuildOptions.None);
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException(
+                "No se pudo generar el build de " + platformName
+                + ". Comprueba que Unity tenga instalado su módulo de compilación. Detalle: " + exception.Message,
+                exception
+            );
+        }
         if (report.summary.result != BuildResult.Succeeded)
-            throw new InvalidOperationException("El build falló. Revisa la consola de Unity.");
+            throw new InvalidOperationException("El build de " + platformName + " falló. Revisa la consola de Unity.");
 
         string executablePath = Path.Combine(buildFolder, executableName);
         string packageExecutablePath = executablePath;
         string signingStagingFolder = null;
-        string archivePath = Path.Combine(projectRoot, "Builds", "Snake-" + normalizedVersion + "-" + target + ".zip");
+        string archivePath = Path.Combine(projectRoot, "Builds", "Snake-" + normalizedVersion + "-" + platformName + ".zip");
         if (File.Exists(archivePath)) File.Delete(archivePath);
 
         if (target == BuildTarget.StandaloneOSX)
@@ -504,7 +561,7 @@ public class ReleasePublisher : EditorWindow
         }
     }
 
-    private void CreateRelease(string normalizedVersion, string archivePath, string installerPath)
+    private void CreateRelease(string normalizedVersion, ReleaseArtifacts artifacts)
     {
         using (HttpClient client = new HttpClient())
         {
@@ -523,9 +580,10 @@ public class ReleasePublisher : EditorWindow
                 throw new InvalidOperationException("GitHub rechazó el release: " + responseBody);
 
             ReleaseResponse release = JsonUtility.FromJson<ReleaseResponse>(responseBody);
-            UploadReleaseAsset(client, release.id, archivePath, "application/zip");
-            if (!string.IsNullOrWhiteSpace(installerPath))
-                UploadReleaseAsset(client, release.id, installerPath, "application/x-apple-diskimage");
+            UploadReleaseAsset(client, release.id, artifacts.macArchivePath, "application/zip");
+            UploadReleaseAsset(client, release.id, artifacts.windowsArchivePath, "application/zip");
+            if (!string.IsNullOrWhiteSpace(artifacts.macInstallerPath))
+                UploadReleaseAsset(client, release.id, artifacts.macInstallerPath, "application/x-apple-diskimage");
         }
     }
 
